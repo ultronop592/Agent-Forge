@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import WorkflowGraph from "@/components/WorkflowGraph";
@@ -46,7 +46,7 @@ interface Plugin {
   description: string;
 }
 
-export default function Workspace() {
+function WorkspaceInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const targetTaskId = searchParams.get("task_id");
@@ -429,5 +429,20 @@ export default function Workspace() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Workspace() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-xs text-slate-500 font-medium">Loading workspace...</p>
+        </div>
+      </div>
+    }>
+      <WorkspaceInner />
+    </Suspense>
   );
 }
