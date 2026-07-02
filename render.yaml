@@ -2,10 +2,11 @@ services:
   # 1. FastAPI Backend Service
   - type: web
     name: agentforge-backend
-    env: docker
-    dockercontext: backend
-    dockerfilepath: Dockerfile
+    runtime: docker
     plan: free
+    build:
+      dockerfile: ./backend/Dockerfile
+      dockerContext: ./backend
     envVars:
       - key: HOST
         value: 0.0.0.0
@@ -23,10 +24,11 @@ services:
   # 2. Next.js Frontend Service
   - type: web
     name: agentforge-frontend
-    env: docker
-    dockercontext: frontend
-    dockerfilepath: Dockerfile
+    runtime: docker
     plan: free
+    build:
+      dockerfile: ./frontend/Dockerfile
+      dockerContext: ./frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
         fromService:
