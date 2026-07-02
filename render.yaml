@@ -1,12 +1,11 @@
 services:
-  # 1. FastAPI Backend Service
+  # 1. FastAPI Backend Service (Frontend will be hosted on Vercel)
   - type: web
     name: agentforge-backend
     runtime: docker
     plan: free
-    build:
-      dockerfile: ./backend/Dockerfile
-      dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     envVars:
       - key: HOST
         value: 0.0.0.0
@@ -20,21 +19,3 @@ services:
         sync: false # Prompt user to input their Tavily API Key
       - key: MCP_SERVERS_JSON
         value: "[]"
-
-  # 2. Next.js Frontend Service
-  - type: web
-    name: agentforge-frontend
-    runtime: docker
-    plan: free
-    build:
-      dockerfile: ./frontend/Dockerfile
-      dockerContext: ./frontend
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        fromService:
-          name: agentforge-backend
-          type: web
-          property: host
-        path: /api # Automatically resolves to https://agentforge-backend.onrender.com/api
-      - key: PORT
-        value: 3000
