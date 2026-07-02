@@ -1,4 +1,4 @@
-import os
+import os  # database reload trigger
 import json
 import logging
 from fastapi import FastAPI
