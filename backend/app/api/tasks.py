@@ -80,11 +80,20 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
         
-    subtasks = db.query(Subtask).filter(Subtask.task_id == task_id).order_index_asc = db.query(Subtask).filter(Subtask.task_id == task_id).order_by(Subtask.order_index.asc()).all()
+    subtasks = db.query(Subtask).filter(Subtask.task_id == task_id).order_by(Subtask.order_index.asc()).all()
     
     res = task.to_dict()
     res["subtasks"] = [s.to_dict() for s in subtasks]
     return res
+
+@router.delete("/{task_id}")
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    return {"message": f"Task {task_id} deleted successfully"}
 
 @router.get("/{task_id}/logs")
 def get_logs(task_id: str, db: Session = Depends(get_db)):

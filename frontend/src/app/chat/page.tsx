@@ -16,7 +16,8 @@ import {
   CheckCircle,
   FileDown,
   RefreshCcw,
-  ListTodo
+  ListTodo,
+  Trash2
 } from "lucide-react";
 
 interface Subtask {
@@ -65,6 +66,7 @@ export default function Workspace() {
   // UI Panels Tabs
   const [activeTab, setActiveTab] = useState<"graph" | "timeline" | "terminal" | "result">("graph");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -216,6 +218,22 @@ export default function Workspace() {
     document.body.removeChild(link);
   };
 
+  const handleDelete = async () => {
+    if (!taskId) return;
+    if (!confirm("Are you sure you want to delete this task? All subtasks and logs will be permanently deleted.")) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await api.deleteTask(taskId);
+      router.push("/chat");
+    } catch (err) {
+      alert("Failed to delete task: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-screen relative z-10">
       {/* Upper Navigation Header */}
@@ -234,7 +252,7 @@ export default function Workspace() {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => router.push("/chat")}
-              className="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[11px] text-slate-300 font-semibold border border-slate-800 flex items-center gap-1.5 transition"
+              className="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[11px] text-slate-300 font-semibold border border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
             >
               <RefreshCcw className="w-3.5 h-3.5" />
               <span>Reset/New Task</span>
@@ -242,12 +260,20 @@ export default function Workspace() {
             {taskStatus === "completed" && finalResult && (
               <button 
                 onClick={downloadResult}
-                className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[11px] text-white font-semibold flex items-center gap-1.5 shadow glow-primary/20 transition"
+                className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[11px] text-white font-semibold flex items-center gap-1.5 shadow glow-primary/20 transition cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5" />
                 <span>Export Report</span>
               </button>
             )}
+            <button 
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-3 py-1.5 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 text-[11px] text-rose-300 font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isDeleting ? "Deleting..." : "Delete Task"}</span>
+            </button>
           </div>
         )}
       </div>

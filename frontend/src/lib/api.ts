@@ -34,6 +34,12 @@ export const api = {
     return def_fetch(`/tasks/${taskId}`);
   },
 
+  async deleteTask(taskId: string) {
+    return def_fetch(`/tasks/${taskId}`, {
+      method: "DELETE",
+    });
+  },
+
   async getLogs(taskId: string) {
     return def_fetch(`/tasks/${taskId}/logs`);
   },

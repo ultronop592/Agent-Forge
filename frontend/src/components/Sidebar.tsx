@@ -9,13 +9,15 @@ import {
   BrainCircuit, 
   Cpu, 
   PocketKnife, 
-  Radio 
+  Radio,
+  History
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Workspace", href: "/chat", icon: MessageSquare },
+  { label: "Launch History", href: "/recent", icon: History },
   { label: "Memory Bank", href: "/memory", icon: BrainCircuit },
   { label: "MCP Servers", href: "/mcp", icon: Cpu },
   { label: "Plugins", href: "/plugins", icon: PocketKnife },
