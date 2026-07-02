@@ -1,0 +1,38 @@
+services:
+  # 1. FastAPI Backend Service
+  - type: web
+    name: agentforge-backend
+    env: docker
+    dockercontext: backend
+    dockerfilepath: Dockerfile
+    plan: free
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false # Prompt user to input their Neon Postgres URL
+      - key: GEMINI_API_KEY
+        sync: false # Prompt user to input their Gemini API Key
+      - key: TAVILY_API_KEY
+        sync: false # Prompt user to input their Tavily API Key
+      - key: MCP_SERVERS_JSON
+        value: "[]"
+
+  # 2. Next.js Frontend Service
+  - type: web
+    name: agentforge-frontend
+    env: docker
+    dockercontext: frontend
+    dockerfilepath: Dockerfile
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: agentforge-backend
+          type: web
+          property: host
+        path: /api # Automatically resolves to https://agentforge-backend.onrender.com/api
+      - key: PORT
+        value: 3000

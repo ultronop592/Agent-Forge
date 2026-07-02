@@ -6,6 +6,11 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 COPY . .
+
+# Inject build argument for Next.js public env var
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
 FROM node:20-alpine AS runner
