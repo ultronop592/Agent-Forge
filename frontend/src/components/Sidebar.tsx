@@ -14,6 +14,12 @@ import {
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 
+// Strip trailing /api to get base server URL for health checks
+const HEALTH_URL = API_BASE_URL.endsWith("/api")
+  ? API_BASE_URL.slice(0, -4) + "/health"
+  : API_BASE_URL + "/health";
+
+
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Workspace", href: "/chat", icon: MessageSquare },
@@ -30,7 +36,7 @@ export default function Sidebar() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL.replace("/api", "")}/health`);
+        const res = await fetch(HEALTH_URL);
         if (res.ok) {
           setApiStatus("healthy");
         } else {
