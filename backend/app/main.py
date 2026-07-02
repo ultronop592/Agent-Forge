@@ -1,5 +1,6 @@
-import os  # database reload trigger
+import os
 import json
+import asyncio
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,10 +32,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
+# CORS configuration — reads comma-separated origins from ALLOWED_ORIGINS env var
+# e.g. ALLOWED_ORIGINS=https://agentforge.vercel.app,https://localhost:3000
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -93,13 +98,11 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("AgentForge shutting down, stopping MCP subprocesses...")
-    import asyncio
     # Await runtime client stops
     await mcp_manager.stop_all()
     logger.info("All MCP subprocesses stopped. Shutdown complete.")
 
 if __name__ == "__main__":
-    import asyncio
     uvicorn.run(
         "backend.app.main:app",
         host=settings.host,
