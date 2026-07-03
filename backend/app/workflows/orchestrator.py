@@ -15,6 +15,33 @@ from backend.app.database.models import Task, Subtask, AgentLog
 
 logger = logging.getLogger("agentforge.workflows")
 
+# ---------------------------------------------------------------------------
+# Context truncation helpers
+# The Executor and Reasoner receive context from previous agents. Without a
+# cap the context can grow to 6,000–10,000+ tokens, directly increasing
+# Gemini API latency. We truncate the *string passed to the LLM* only —
+# the full outputs remain stored in AgentState for downstream use.
+# ---------------------------------------------------------------------------
+_EXECUTOR_CONTEXT_CHAR_LIMIT = 8_000   # ~2,000 tokens — enough for synthesis
+_REASONER_CONTEXT_CHAR_LIMIT = 12_000  # ~3,000 tokens — reasoner needs more signal
+
+
+def _truncate_context(context: str, char_limit: int, label: str) -> str:
+    """Truncate context to char_limit, appending a notice when trimmed."""
+    if len(context) <= char_limit:
+        return context
+    trimmed = context[:char_limit]
+    # Truncate at a clean newline boundary if possible
+    last_newline = trimmed.rfind("\n")
+    if last_newline > char_limit * 0.8:  # only snap if near the end
+        trimmed = trimmed[:last_newline]
+    trimmed += (
+        f"\n\n[⚠️ {label} context truncated to {char_limit:,} chars for efficiency. "
+        "Full outputs are stored in agent state.]"
+    )
+    logger.info(f"Context for {label} truncated from {len(context):,} → {len(trimmed):,} chars.")
+    return trimmed
+
 # Instantiate agents
 planner_agent = PlannerAgent()
 researcher_agent = ResearcherAgent()
@@ -128,8 +155,14 @@ async def reasoner_node(state: AgentState) -> Dict[str, Any]:
     
     update_subtask_in_db(subtask_id, "running")
     
-    # Gather previous subtasks outputs as context
-    prev_context = "\n\n".join([f"--- Subtask: {sub['title']} ---\n{output}" for sub_id, output in state["agent_outputs"].items() for sub in state["subtasks"] if sub["id"] == sub_id])
+    # Gather previous subtasks outputs as context, then truncate to keep LLM
+    # prompt size manageable and reduce API latency.
+    prev_context_full = "\n\n".join([
+        f"--- Subtask: {sub['title']} ---\n{output}"
+        for sub_id, output in state["agent_outputs"].items()
+        for sub in state["subtasks"] if sub["id"] == sub_id
+    ])
+    prev_context = _truncate_context(prev_context_full, _REASONER_CONTEXT_CHAR_LIMIT, "Reasoner")
     
     output = await reasoner_agent.run_subtask(
         subtask_title=subtask["title"],
@@ -157,8 +190,15 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     
     update_subtask_in_db(subtask_id, "running")
     
-    # Gather previous context
-    context = "\n\n".join([f"--- Context: {sub['title']} ---\n{output}" for sub_id, output in state["agent_outputs"].items() for sub in state["subtasks"] if sub["id"] == sub_id])
+    # Gather previous context, then truncate to keep the LLM prompt compact.
+    # The Executor synthesises — it does not need the full verbatim text from
+    # every prior agent; a dense summary window is sufficient.
+    context_full = "\n\n".join([
+        f"--- Context: {sub['title']} ---\n{output}"
+        for sub_id, output in state["agent_outputs"].items()
+        for sub in state["subtasks"] if sub["id"] == sub_id
+    ])
+    context = _truncate_context(context_full, _EXECUTOR_CONTEXT_CHAR_LIMIT, "Executor")
     
     output = await executor_agent.run_subtask(
         subtask_title=subtask["title"],

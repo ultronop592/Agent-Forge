@@ -135,6 +135,7 @@ class ResearcherAgent(BaseAgent):
             prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
-            mock_response_content=mock_research_doc
+            mock_response_content=mock_research_doc,
+            max_output_tokens=3000
         )
         return output

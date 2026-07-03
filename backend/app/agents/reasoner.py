@@ -60,6 +60,7 @@ class ReasonerAgent(BaseAgent):
             prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
-            mock_response_content=mock_reasoning_doc
+            mock_response_content=mock_reasoning_doc,
+            max_output_tokens=2048
         )
         return output

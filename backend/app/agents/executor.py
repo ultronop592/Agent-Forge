@@ -5,10 +5,10 @@ class ExecutorAgent(BaseAgent):
         super().__init__(
             name="Executor",
             system_instruction=(
-                "You are the Lead Execution Agent. Your job is to create the actual final product. "
-                "This could be writing production-quality code, formatting detailed reports, creating tables, "
-                "or building implementation guides. Focus on structure, clarity, proper formatting, and execution detail. "
-                "Ensure your outputs are comprehensive and ready to be delivered to the client."
+                "You are the Lead Execution Agent. Create the final deliverable for the assigned subtask. "
+                "This may be production-quality code, a structured report, tables, or an implementation guide. "
+                "Be concise, precise, and well-structured. Avoid padding, preamble, or unnecessary repetition. "
+                "Deliver the highest-signal output in the fewest words possible."
             )
         )
 
@@ -137,13 +137,14 @@ class ExecutorAgent(BaseAgent):
             prompt=(
                 f"You have been assigned the subtask: {subtask_title}\n"
                 f"Subtask Details: {subtask_desc}\n\n"
-                f"Here is the context and previous agent reasoning to build upon:\n"
+                f"Context from prior agents (use as reference, do not repeat verbatim):\n"
                 f"{context}\n\n"
-                "Please generate the complete, finalized output for this subtask. "
-                "Ensure it is rich, descriptive, and formatted in markdown."
+                "Generate the complete, finalized output for this subtask. "
+                "Be concise, accurate, and structured. Avoid padding or repeating context already provided."
             ),
             task_id=task_id,
             subtask_id=subtask_id,
-            mock_response_content=mock_execution_output
+            mock_response_content=mock_execution_output,
+            max_output_tokens=2048
         )
         return output

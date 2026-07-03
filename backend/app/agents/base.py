@@ -3,6 +3,7 @@ import json
 import logging
 import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Type, Any, Dict, List
 from pydantic import BaseModel
 from google import genai
@@ -13,6 +14,11 @@ from backend.app.database.models import AgentLog
 
 logger = logging.getLogger("agentforge.agents")
 logger.setLevel(logging.INFO)
+
+# Dedicated thread pool for LLM API calls, decoupled from FastAPI's default pool.
+# This prevents DB writes and other blocking I/O from queuing up behind LLM calls.
+_LLM_EXECUTOR = ThreadPoolExecutor(max_workers=10, thread_name_prefix="agentforge-llm")
+
 
 class BaseAgent:
     def __init__(self, name: str, system_instruction: str):
@@ -54,7 +60,8 @@ class BaseAgent:
         task_id: str,
         subtask_id: Optional[str] = None,
         response_schema: Optional[Type[BaseModel]] = None,
-        mock_response_content: Optional[str] = None
+        mock_response_content: Optional[str] = None,
+        max_output_tokens: Optional[int] = None
     ) -> str:
         # Log that thinking is starting
         self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is analyzing prompt:\n\"{prompt[:150]}...\"")
@@ -62,7 +69,7 @@ class BaseAgent:
         if not self.has_llm:
             # Generate or return mock response
             self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is running in DEMO mode.")
-            await asyncio.sleep(0.3) # Simulate network time
+            await asyncio.sleep(0.3)  # Simulate network time
             
             if response_schema and mock_response_content:
                 try:
@@ -80,6 +87,8 @@ class BaseAgent:
             if response_schema:
                 config_params["response_mime_type"] = "application/json"
                 config_params["response_schema"] = response_schema
+            if max_output_tokens:
+                config_params["max_output_tokens"] = max_output_tokens
             
             config = types.GenerateContentConfig(
                 system_instruction=self.system_instruction,
@@ -87,7 +96,8 @@ class BaseAgent:
                 **config_params
             )
 
-            # Use thread executor to run synchronous API call asynchronously
+            # Use the dedicated LLM thread pool to avoid contention with the
+            # default FastAPI/asyncio thread pool used by DB writes and other I/O.
             loop = asyncio.get_running_loop()
             
             max_retries = 3
@@ -101,7 +111,7 @@ class BaseAgent:
                             config=config
                         )
                         
-                    response = await loop.run_in_executor(None, call_api)
+                    response = await loop.run_in_executor(_LLM_EXECUTOR, call_api)
                     result_text = response.text or ""
                     
                     # Log the final agent output
