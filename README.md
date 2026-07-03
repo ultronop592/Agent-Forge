@@ -7,338 +7,214 @@
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
 
-> **Tagline:** *“A collaborative AI workforce that researches, reasons, plans, executes, verifies, and continuously improves complex real-world tasks.”*
+> *"A collaborative AI workforce that researches, reasons, plans, executes, verifies, and continuously improves complex real-world tasks."*
 
 ---
 
 ## 🌟 What is AgentForge?
 
-AgentForge is a **Multi-Agent Workforce Platform** designed to solve complex, multi-step tasks by coordinating specialized AI agents. Unlike standard single-prompt chatbots that struggle with long-context planning, hallucinations, and critical self-correction, AgentForge operates like an **autonomous software organization in a box**.
+AgentForge is a **Multi-Agent Workforce Platform** — not a chatbot, not a single-model assistant, but a coordinated team of specialized AI workers that collaborate on complex, multi-step goals.
 
-The platform splits the cognitive load among **six specialized agents**. They execute work sequentially, pass structured data through a shared state, store long-term learnings, and perform QA verification before presenting the final result.
+Most AI tools today operate like a single freelancer handed an entire project. They attempt to plan, research, write, and verify all at once, leading to inconsistent quality, hallucinations, and poor performance on long-horizon tasks.
 
----
-
-## 👥 Meet the AI Workforce
-
-Each agent is defined in the backend and runs inside a dedicated LangGraph node with its own system instructions, tools, and execution loops:
-
-| Icon | Agent Name | Source File | Corporate Role | Primary Responsibilities |
-| :---: | :--- | :--- | :--- | :--- |
-| 🧭 | **Planner** | [`planner.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/planner.py) | *Project Manager / Architect* | Reads the user prompt, breaks it down into structured subtasks, and assigns nodes. |
-| 🔍 | **Researcher** | [`researcher.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/researcher.py) | *Market & Technical Analyst* | Gathers information using Tavily search queries, crawls targets, and compiles raw text references. |
-| 🧠 | **Reasoner** | [`reasoner.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/reasoner.py) | *Critical Thinker / Critic* | Analyzes search findings, detects logical discrepancies, runs SWOT checks, and formats notes. |
-| 📝 | **Executor** | [`executor.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/executor.py) | *Developer & Technical Writer* | Synthesizes researched data and reasoning guidelines into final markdown reports or code blocks. |
-| 🛡️ | **Verifier** | [`verifier.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/verifier.py) | *Quality Assurance (QA) Inspector* | Fact-checks generated output against initial constraints, flags hallucinations, and scores confidence. |
-| 📁 | **Memory** | [`memory_agent.py`](file:///c:/kaggle%20ai%20agent/backend/app/agents/memory_agent.py) | *Librarian / Historian* | Queries historical task results for relevant past insights, and saves new learnings to the database. |
+AgentForge solves this by thinking like an **organization**. The work is distributed across dedicated agents — each with a defined role, its own reasoning loop, and a handoff protocol. The result is a pipeline that is more accurate, more transparent, and more reliable than any single-model approach.
 
 ---
 
-## 🔄 How the Workforce Collaborates (Under the Hood)
+## 🧠 Core Concept — Multi-Agent Orchestration
 
-When a user submits a goal (e.g., *"Research competitive pricing structures in AI platform tools"*), the backend routes the task through a LangGraph state machine:
+The central idea is **cognitive division of labor**. Human organizations don't have one person plan, research, write, review, and archive simultaneously. Neither does AgentForge.
+
+When a user submits a goal, the system does not just forward it to a language model. Instead, it routes the goal through a structured sequence of agents, each of which:
+
+- Receives a focused, scoped subtask (not the full open-ended goal)
+- Operates with its own domain-specific reasoning instructions
+- Passes its output to the next agent as structured context
+- Has its work independently verified at the end
+
+This architecture is called a **directed agent graph** — a flowchart of AI workers where data moves forward through the pipeline, each node building on the work of the previous one.
+
+---
+
+## 👥 The Six Agent Roles
+
+| Icon | Agent | Role | What It Does |
+| :---: | :--- | :--- | :--- |
+| 🧭 | **Planner** | Project Manager | Reads the user's goal and decomposes it into 2–3 ordered subtasks. Decides which agent handles which step. |
+| 🔍 | **Researcher** | Intelligence Analyst | Searches the web via Tavily, aggregates sources, and produces a structured research document. |
+| 🧠 | **Reasoner** | Critical Thinker | Receives research output, cross-checks facts, identifies logical gaps, runs SWOT-style analysis, and draws conclusions. |
+| 📝 | **Executor** | Technical Writer / Developer | Takes research and reasoning as context and produces the final deliverable — a report, code, guide, or analysis. |
+| 🛡️ | **Verifier** | QA Inspector | Fact-checks the Executor's output against the original goal, scores confidence (0.0–1.0), and flags hallucinations. |
+| 📁 | **Memory** | Institutional Librarian | Queries past task results for relevant context before new tasks begin. Saves key learnings after each task completes. |
+
+---
+
+## 🔄 How the Agents Collaborate — The Full Flow
 
 ```mermaid
 graph TD
-    User([User Prompt]) --> PlannerNode[🧭 Planner Node]
-    
-    subgraph Shared State Graph [LangGraph State Machine]
-        PlannerNode --> |Initializes Tasks & Subtasks in DB| StateUpdate{State Router}
-        StateUpdate --> |assigned_agent: researcher| ResearcherNode[🔍 Researcher Node]
-        StateUpdate --> |assigned_agent: reasoner| ReasonerNode[🧠 Reasoner Node]
-        StateUpdate --> |assigned_agent: executor| ExecutorNode[📝 Executor Node]
-        StateUpdate --> |assigned_agent: memory_agent| MemoryNode[📁 Memory Node]
-        
-        ResearcherNode --> |Updates agent_outputs & increments index| StateUpdate
-        ReasonerNode --> |Updates agent_outputs & increments index| StateUpdate
-        ExecutorNode --> |Updates agent_outputs & increments index| StateUpdate
-        MemoryNode --> |Updates agent_outputs & increments index| StateUpdate
-        
-        StateUpdate --> |all subtasks completed| VerifierNode[🛡️ Verifier Node]
-        VerifierNode --> |Fact-Checks & Confidence Score| StoreMemory[Save Lessons to DB]
+    User([🧑 User Submits a Goal]) --> Planner[🧭 Planner Agent]
+
+    subgraph LangGraph State Machine
+        Planner -->|Decomposes into subtasks & stores in DB| Router{Dynamic State Router}
+
+        Router -->|researcher subtask| Researcher[🔍 Researcher Agent]
+        Router -->|reasoner subtask| Reasoner[🧠 Reasoner Agent]
+        Router -->|executor subtask| Executor[📝 Executor Agent]
+        Router -->|memory_agent subtask| Memory[📁 Memory Agent]
+
+        Researcher -->|Output saved to shared state| Router
+        Reasoner -->|Output saved to shared state| Router
+        Executor -->|Output saved to shared state| Router
+        Memory -->|Output saved to shared state| Router
+
+        Router -->|All subtasks done| Verifier[🛡️ Verifier Agent]
+        Verifier -->|Confidence scored & lesson saved| Done[✅ Task Complete]
     end
 
-    StoreMemory --> Complete[🎉 Final Result Streamed via SSE]
-    Complete --> UserDashboard[Frontend UI Dashboard]
+    Done -->|Streamed via SSE| Dashboard[🖥️ Frontend Dashboard]
 ```
 
-### Process Lifecycle:
-1. **Plan & Decompose**: The **Planner** receives the request and dynamically decomposes it into an ordered list of subtasks.
-2. **Sequential Routing**: The [`orchestrator.py`](file:///c:/kaggle%20ai%20agent/backend/app/workflows/orchestrator.py) script reads the subtask list and sequentially invokes the correct agent node.
-3. **Execution & Update**: Each agent posts live logs to SQLite, updates the backend state dict, and yields execution to the next node.
-4. **Factual Verification**: The **Verifier** runs a final pass. If validation is successful, the output is saved to the dashboard, and key insights are recorded for future workflows.
+### Step-by-Step Walkthrough
+
+**Step 1 — Planning**
+The user submits a goal. The Planner Agent reads the full goal and uses the language model to intelligently decompose it into 2–3 sequential subtasks. Each subtask is assigned to the appropriate specialist agent and stored in the database.
+
+**Step 2 — Dynamic Routing**
+The LangGraph orchestrator reads the ordered subtask list. A conditional routing function inspects each subtask's `assigned_agent` field and dispatches it to the correct node in the graph — no hard-coded sequence, fully data-driven.
+
+**Step 3 — Sequential Agent Execution**
+Each agent runs one subtask at a time. It receives the full context from all previous agents, performs its specialized reasoning, and appends its output to the shared `AgentState` dictionary before returning control to the router. Real-time thinking logs are written to the database and streamed live to the frontend.
+
+**Step 4 — Verification**
+Once all subtasks are complete, the Verifier Agent runs automatically. It evaluates the Executor's final output against the original goal, assigns a confidence score, and polishes the document. The result is persisted to the database.
+
+**Step 5 — Memory Storage**
+Immediately after verification, the Memory Agent saves the key lesson from the task to long-term storage. Future tasks on similar topics will retrieve this context in Step 1, making the system progressively smarter over time.
 
 ---
 
-## 🛠️ The Tech Stack
+## 🛠️ Architecture & Technology
 
-AgentForge uses modern, production-grade frameworks designed for performance and flexibility:
-
-### 1. LangGraph State Machine
-Powering the core backend workflow is [LangGraph](https://github.com/langchain-ai/langgraph). It maintains the `AgentState` object, which passes the task description, subtask details, agent outputs, and verifications safely between nodes. Check out [`state.py`](file:///c:/kaggle%20ai%20agent/backend/app/workflows/state.py) for the schema design.
-
-### 2. FastAPI Async Server
-The API backend ([`main.py`](file:///c:/kaggle%20ai%20agent/backend/app/main.py)) leverages async Python for background task processing. It uses **Server-Sent Events (SSE)** via [`tasks.py`](file:///c:/kaggle%20ai%20agent/backend/app/api/tasks.py) to stream real-time thinking logs from active agent subprocesses directly to the UI without the overhead of WebSockets.
-
-### 3. Next.js App Router (Frontend)
-The interface is a visual command center written in Next.js and Tailwind CSS featuring:
-* **Workflow Graph**: An interactive, dynamic SVG representation of the active agent workflow showing which node is running.
-* **Agent Terminal**: Monospace panel streaming raw agent logs in real time.
-* **Timeline Tracker**: An execution list indicating task statuses (`pending`, `running`, `completed`).
-
-### 4. Model Context Protocol (MCP) Manager
-The system integrates an MCP client ([`client.py`](file:///c:/kaggle%20ai%20agent/backend/app/mcp/client.py)) matching Anthropic's open standard. It can spin up local stdio servers (Python scripts, Node apps, or CLI tools), parse their JSON-RPC manifest, and automatically register their functions as tools that agents can invoke.
+AgentForge is composed of three layers — a stateful backend workflow engine, a REST API communication layer, and a real-time frontend dashboard.
 
 ---
 
-## 📂 Folder Structure Map
+### Layer 1 — Workflow Engine (LangGraph + Python)
 
-Here is the master layout of the workspace. Click any file or directory link to jump directly to its implementation:
+The brain of the system. LangGraph compiles a **StateGraph** — a directed flowchart of agent nodes and conditional routing edges. A shared `AgentState` dictionary acts as the project file, passed from node to node and enriched at each step.
+
+Every agent node follows the same contract:
+- It reads from the shared state
+- It calls the Gemini 2.5 Flash language model with a focused, scoped prompt
+- It writes its output back to the shared state
+- It updates the task and subtask status in the database
+
+The graph is compiled once at application startup and reused for every task, making execution stateless and concurrent-safe.
+
+---
+
+### Layer 2 — API Server (FastAPI + Async Python)
+
+FastAPI serves as the coordination layer between the frontend and the workflow engine. When a user submits a task, FastAPI:
+
+1. Creates a `Task` record in the database
+2. Launches the LangGraph workflow as a **background task** (non-blocking)
+3. Returns the task ID to the frontend immediately
+
+The frontend then opens a **Server-Sent Events (SSE)** stream on that task ID. The SSE endpoint polls the database every 500ms and pushes any new agent logs, subtask status changes, or final results to the frontend in real time — without any polling from the client side.
+
+---
+
+### Layer 3 — Frontend Dashboard (Next.js + TypeScript)
+
+The visual command center of the application. Built with Next.js App Router and rendered as a dark glassmorphism interface. The dashboard features:
+
+- **Workflow Graph** — A live SVG node graph showing which agent is active and how data flows between them
+- **Agent Terminal** — A monospace console streaming raw thinking logs from each agent in real time
+- **Execution Timeline** — A step-by-step checklist of subtask statuses (pending → running → completed)
+- **Verified Output Viewer** — A clean Markdown document renderer showing the final polished result with confidence scoring
+
+---
+
+### Supporting Systems
+
+**SQLite / PostgreSQL Database**
+Stores all tasks, subtasks, agent logs, memory entries, and MCP server configurations. On Render (production), a Neon PostgreSQL instance is used. Locally, SQLite is the default for zero-configuration setup.
+
+**Model Context Protocol (MCP) Manager**
+An extensible plugin bus for external tools. The MCP manager can connect to any stdio-compatible server (Node.js, Python, or any CLI tool), discover its available tools via JSON-RPC, and make those tools callable by any agent. This allows the system to be extended with filesystem access, browser control, database queries, or any custom tooling without modifying the agent code itself.
+
+**Tavily Search API**
+Used exclusively by the Researcher Agent. Tavily is a search API purpose-built for AI agents — it returns structured, summarized results (not raw HTML) optimized for language model consumption. The Researcher uses it to gather real-world information before the reasoning and execution stages.
+
+**Gemini 2.5 Flash**
+The language model powering all six agents. Chosen for its large context window (critical for processing multi-agent accumulated state), fast inference speed, and structured JSON output mode (used by the Planner and Verifier for reliable schema-validated responses).
+
+---
+
+## 📂 Folder Structure
 
 ```
 agentforge/
 │
-├── 📂 backend/                             # BACKEND ENGINE (FastAPI, LangGraph & SQLite)
-│   ├── 📂 app/
-│   │   ├── 📂 api/                         # REST API endpoints
-│   │   │   ├── 📄 agents.py                # Returns active agent configurations
-│   │   │   ├── 📄 mcp.py                   # Registers and manages MCP servers
-│   │   │   ├── 📄 memory.py                # Queries SQLite database memories
-│   │   │   ├── 📄 plugins.py               # Lists registered workflow templates
-│   │   │   └── 📄 tasks.py                 # Handles execution triggers & SSE streams
-│   │   │
-│   │   ├── 📂 agents/                      # LLM Agent Definitions
-│   │   │   ├── 📄 base.py                  # BaseAgent (Gemini SDK helper & retry fallback)
-│   │   │   ├── 📄 planner.py               # 🧭 Planner Agent logic
-│   │   │   ├── 📄 researcher.py            # 🔍 Research Agent logic
-│   │   │   ├── 📄 reasoner.py              # 🧠 Reasoner Agent logic
-│   │   │   ├── 📄 executor.py              # 📝 Execution Agent logic
-│   │   │   ├── 📄 verifier.py              # 🛡️ Verifier Agent logic
-│   │   │   └── 📄 memory_agent.py          # 📁 Memory Agent logic
-│   │   │
-│   │   ├── 📂 core/                        # System Configurations
-│   │   │   └── 📄 config.py                # Loads environment variables from .env
-│   │   │
-│   │   ├── 📂 database/                    # SQLite Schema & connection configuration
-│   │   │   ├── 📄 connection.py            # SQLite session creator
-│   │   │   └── 📄 models.py                # SQLAlchemy Models (Task, Subtask, AgentLog)
-│   │   │
-│   │   ├── 📂 mcp/                         # Model Context Protocol Client
-│   │   │   └── 📄 client.py                # JSON-RPC Client interfacing with stdio servers
-│   │   │
-│   │   ├── 📂 plugins/                     # Task-specific Plugin Workflows
-│   │   │   ├── 📄 base_plugin.py           # Base Plugin abstract class
-│   │   │   ├── 📄 registry.py              # Plugin registry manager
-│   │   │   ├── 📄 software_debug.py        # 🐞 Software Debugging workflow plugin
-│   │   │   └── 📄 startup_research.py      # 📈 Startup Market Research workflow plugin
-│   │   │
-│   │   ├── 📂 workflows/                   # LangGraph Flowchart definition
-│   │   │   ├── 📄 state.py                 # Dict-based Shared Graph State definition
-│   │   │   └── 📄 orchestrator.py          # LangGraph graph compiles, nodes & edges definitions
-│   │   │
-│   │   └── 📄 main.py                      # FastAPI App entrypoint
-│   │
-│   ├── 📄 requirements.txt                 # Python dependencies
-│   ├── 📄 test_system.py                   # Automated integration compiler test script
-│   └── 📄 Dockerfile                       # Python service Dockerfile
+├── backend/                    # Python backend — FastAPI, LangGraph, Agents
+│   └── app/
+│       ├── api/                # REST endpoints (tasks, agents, memory, plugins, mcp)
+│       ├── agents/             # Six agent definitions (planner, researcher, reasoner, executor, verifier, memory)
+│       ├── core/               # Environment config loader
+│       ├── database/           # SQLAlchemy models and session management
+│       ├── mcp/                # MCP JSON-RPC client and manager
+│       ├── plugins/            # Workflow plugin registry and built-in plugins
+│       ├── workflows/          # LangGraph state schema and orchestrator graph
+│       └── main.py             # FastAPI application entrypoint
 │
-├── 📂 frontend/                            # FRONTEND DASHBOARD (Next.js & TypeScript)
-│   ├── 📂 src/
-│   │   ├── 📂 app/                         # App Router routing directories
-│   │   │   ├── 📂 chat/                    # Primary interactive chat Workspace view
-│   │   │   ├── 📂 mcp/                     # MCP Console (add servers & trigger tools)
-│   │   │   ├── 📂 memory/                  # Database Memory Viewer
-│   │   │   ├── 📂 plugins/                 # Installed plugins registry page
-│   │   │   ├── 📂 recent/                  # Completed execution history dashboard
-│   │   │   ├── 📄 layout.tsx               # Main Dashboard sidebar wrapper
-│   │   │   ├── 📄 globals.css              # Custom themes, scrolling & glow styles
-│   │   │   └── 📄 page.tsx                 # Entry workspace landing metrics page
-│   │   │
-│   │   ├── 📂 components/                  # Custom components
-│   │   │   ├── 📄 AgentCard.tsx            # Grid card tracking live agent progress status
-│   │   │   ├── 📄 AgentTerminal.tsx        # Command terminal viewport showing log history
-│   │   │   ├── 📄 MarkdownRenderer.tsx     # Custom MD preview with code formatting
-│   │   │   ├── 📄 Sidebar.tsx              # Application layout sidebar navigation
-│   │   │   ├── 📄 Timeline.tsx             # Interactive subtask process progress checklist
-│   │   │   └── 📄 WorkflowGraph.tsx        # Dynamic SVG flow charting graph nodes transitions
-│   │   │
-│   │   └── 📂 lib/
-│   │       └── 📄 api.ts                   # Central client API helpers
-│   │
-│   ├── 📄 package.json                     # Frontend NPM dependencies
-│   └── 📄 Dockerfile                       # Next.js service Dockerfile
+├── frontend/                   # Next.js frontend — Dashboard UI
+│   └── src/
+│       ├── app/                # App Router pages (chat, memory, plugins, mcp, recent)
+│       ├── components/         # UI components (WorkflowGraph, AgentTerminal, Timeline, etc.)
+│       └── lib/                # API client helpers
 │
-├── 📄 docker-compose.yml                   # Container orchestration script
-├── 📄 render.yaml                          # Render PaaS deployment file
-└── 📄 README.md                            # Main project workspace documentation
+├── docker-compose.yml          # Local container orchestration
+├── render.yaml                 # Render PaaS deployment configuration
+└── .env.example                # Environment variable template
 ```
 
 ---
 
-## ⚡ Setup & Run Guidelines
+## 🔌 Plugin System
 
-Follow these steps to configure, verify, and run AgentForge on your local machine:
+AgentForge's workflow sequences are not hard-coded. Each workflow is packaged as a **Plugin** — a self-contained configuration class that defines:
 
-### 1. Environment Configurations
-Clone the workspace, copy the template `.env.example` in the root folder, and name it `.env`:
-```bash
-cp .env.example .env
-```
-Fill in the parameters:
-* **`GEMINI_API_KEY`**: Obtain a key at [Google AI Studio](https://aistudio.google.com/). 
-* **`TAVILY_API_KEY`**: Obtain a search engine key at [Tavily](https://tavily.com/).
-* **`DATABASE_URL`**: Set to default SQLite `sqlite:///./agentforge.db` or standard Postgres.
-* **`MCP_SERVERS_JSON`**: Register custom servers as a JSON string (e.g., `[]`).
+- The **name and ID** of the workflow (displayed in the UI dropdown)
+- A **description** of what it does
+- Custom **system instructions** for each agent (overriding their default personas)
+- A **default subtask sequence** if the Planner should bypass LLM decomposition
 
-> [!TIP]
-> **Demo/Mock Mode Fallback:** If `GEMINI_API_KEY` is not present, AgentForge automatically operates in **Demo Mode**. It will bypass live API queries, run local mocks, simulate streaming logs, and render task transitions so you can inspect the Next.js visual graphs immediately.
+Two plugins ship out of the box:
 
----
+| Plugin | Purpose | Agent Sequence |
+| :--- | :--- | :--- |
+| **Startup Market Research** | Market sizing, SWOT analysis, competitor profiling | Memory → Researcher → Reasoner → Executor → Verifier |
+| **Software Debugging Suite** | Root cause diagnosis and code fix generation | Researcher → Reasoner → Executor → Verifier |
 
-### 2. Traditional Local Execution
-
-Ensure you have **Python 3.11+** and **Node.js v20+** installed.
-
-#### **Backend Setup:**
-1. Navigate to the `backend` folder:
-   ```bash
-   cd backend
-   ```
-2. Create and activate a Python virtual environment:
-   ```bash
-   python -m venv venv
-   # On Windows:
-   .\venv\Scripts\activate
-   # On macOS/Linux:
-   source venv/bin/activate
-   ```
-3. Install the backend libraries:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Run integration tests to compile components and verify DB migrations:
-   ```bash
-   python test_system.py
-   ```
-5. Start the FastAPI server:
-   ```bash
-   python -m app.main
-   ```
-   *The backend is live at [http://localhost:8000](http://localhost:8000).*
-
-#### **Frontend Setup:**
-1. In a new terminal tab, navigate to the `frontend` folder:
-   ```bash
-   cd frontend
-   ```
-2. Install npm dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-   *The dashboard is live at [http://localhost:3000](http://localhost:3000).*
+New plugins can be added by creating a single class file and registering it in the plugin registry. The frontend immediately reflects the new workflow option with no UI changes required.
 
 ---
 
-### 3. Docker Compose Orchestration (Recommended)
+## 🔮 Future Roadmap
 
-To run the entire ecosystem without setting up local runtimes:
-1. Ensure Docker Desktop is running.
-2. In the root directory, build and launch containers:
-   ```bash
-   docker-compose up --build
-   ```
-3. View the components:
-   * **Dashboard Center**: [http://localhost:3000](http://localhost:3000)
-   * **Swagger Interactive Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+**Semantic Vector Memory**
+Replace the current keyword-based SQLite memory with a vector database (ChromaDB, PgVector, or Pinecone) to enable embedding-based similarity search. This allows the Memory Agent to retrieve contextually relevant past insights rather than exact keyword matches.
 
----
+**Graph Loopback on Verification Failure**
+Extend the LangGraph edges so that if the Verifier assigns a confidence score below a threshold, the task is automatically routed back to the Executor with the Verifier's feedback as a correction prompt — a self-healing pipeline.
 
-## 🔌 How to Add Custom Plugins (Workflows)
+**Containerized MCP Sandboxing**
+Run all external MCP tool servers inside isolated Docker containers, preventing third-party scripts from accessing the host filesystem or network during production execution.
 
-Workspaces are packaged as modular **Plugins**. Follow these steps to register a new plugin:
+**Full-Duplex WebSocket Streaming**
+Upgrade the current one-way Server-Sent Events stream to bidirectional WebSockets, enabling users to inject instructions or corrections into an active pipeline mid-execution.
 
-### Step 1: Write the Plugin Class
-Create a Python file in `backend/app/plugins/resume_review.py`:
-```python
-from typing import List, Dict, Any
-from backend.app.plugins.base_plugin import BaseWorkflowPlugin
-
-class ResumeReviewPlugin(BaseWorkflowPlugin):
-    @property
-    def name(self) -> str:
-        return "Resume Quality Review"
-
-    @property
-    def plugin_id(self) -> str:
-        return "resume_review"
-
-    @property
-    def description(self) -> str:
-        return "Evaluates candidate resumes against job descriptions and drafts email reports."
-
-    def get_custom_system_instruction(self, agent_name: str) -> str:
-        if agent_name == "Planner":
-            return "You are an HR Director Planner. Partition resume audits."
-        elif agent_name == "Reasoner":
-            return "You are a recruitment specialist. Compare resume skills against requirements."
-        elif agent_name == "Executor":
-            return "You are a copywriter. Draft recommendations and candidate emails."
-        return ""
-
-    def get_default_subtasks(self, prompt: str) -> List[Dict[str, Any]]:
-        return [
-            {
-                "title": "Analyze Resume Content",
-                "description": f"Read resume skills and search references matching: {prompt}",
-                "assigned_agent": "researcher",
-                "order_index": 0
-            },
-            {
-                "title": "Evaluate Job Alignment",
-                "description": "Perform comparative audit, find matching skills, and list missing experience.",
-                "assigned_agent": "reasoner",
-                "order_index": 1
-            },
-            {
-                "title": "Draft HR Evaluation Report",
-                "description": "Draft candidate profile scorecard and write outreach emails.",
-                "assigned_agent": "executor",
-                "order_index": 2
-            },
-            {
-                "title": "Verify Output Integrity",
-                "description": "Ensure candidate scores are correct and text is clean.",
-                "assigned_agent": "verifier",
-                "order_index": 3
-            }
-        ]
-```
-
-### Step 2: Register the Plugin in the Registry
-Modify [`registry.py`](file:///c:/kaggle%20ai%20agent/backend/app/plugins/registry.py):
-```diff
-  # Import plugins to register them
-  from backend.app.plugins.software_debug import SoftwareDebugPlugin
-  from backend.app.plugins.startup_research import StartupResearchPlugin
-+ from backend.app.plugins.resume_review import ResumeReviewPlugin
-
-  plugin_registry.register(SoftwareDebugPlugin())
-  plugin_registry.register(StartupResearchPlugin())
-+ plugin_registry.register(ResumeReviewPlugin())
-```
-
-### Step 3: Refresh the UI
-Restart the backend server. The Next.js dropdown selector will immediately show the new **Resume Quality Review** option, dynamically building the execution path upon workspace launch!
-
----
-
-## 🔮 Production Roadmap
-
-1. **Semantic Vector DB**: Migrate the current SQLite key/value memory to PgVector, ChromaDB, or Pinecone for robust high-dimensional cosine similarity searches.
-2. **Isolated MCP Containers**: Sandbox external standard MCP tool execution inside micro-VMs or secure Docker containers (e.g. using `python-on-whales`) to safely invoke code compilers in production.
-3. **Factual Re-route Loops**: Enhance the LangGraph loopback conditions: if the Verifier returns a low score, it routes back to the Executor with structured feedback to repair the document before finishing.
-4. **WebSocket Channels**: Upgrade Server-Sent Events (SSE) to full-duplex WebSockets to support interactive input from the user mid-way through a subtask execution.
+**Multi-User Authentication**
+Add OAuth 2.0 authentication and per-user task isolation to support concurrent multi-tenant usage on a shared deployment.
