@@ -127,7 +127,7 @@ export default function MemoryBank() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search keywords inside recorded memories..."
+            placeholder="Search semantically inside recorded memories (e.g. 'TAM figures' or 'coding bugs')..."
             className="w-full bg-slate-950 border border-slate-850/80 rounded-lg pl-10 pr-4 py-3 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -157,12 +157,12 @@ export default function MemoryBank() {
           })}
         </div>
       </div>
-
+ 
       {/* Memories Grid list */}
       <div className="space-y-4">
         {memories.length === 0 ? (
           <div className="text-center py-16 text-slate-500 text-xs italic bg-slate-950 border border-slate-900 rounded-xl">
-            No memories matched your search keywords. Execute a task to record agent observations automatically.
+            No memories matched your semantic query. Execute a task to record agent observations automatically.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
