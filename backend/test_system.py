@@ -52,7 +52,9 @@ async def run_test():
             "current_subtask_index": 0,
             "agent_outputs": {},
             "verification_results": {},
-            "final_result": ""
+            "final_result": "",
+            "retry_count": 0,
+            "verifier_feedback": ""
         }
         
         await orchestrator_graph.ainvoke(initial_state)

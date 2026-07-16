@@ -9,3 +9,5 @@ class AgentState(TypedDict):
     agent_outputs: Dict[str, str]
     verification_results: Dict[str, Any]
     final_result: str
+    retry_count: int
+    verifier_feedback: str

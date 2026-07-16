@@ -12,7 +12,7 @@ class ExecutorAgent(BaseAgent):
             )
         )
 
-    async def run_subtask(self, subtask_title: str, subtask_desc: str, context: str, task_id: str, subtask_id: str) -> str:
+    async def run_subtask(self, subtask_title: str, subtask_desc: str, context: str, task_id: str, subtask_id: str, verifier_feedback: str = "") -> str:
         # Detect whether this is a coding or business/research task
         task_lower = (subtask_title + " " + subtask_desc).lower()
         is_code_task = any(w in task_lower for w in [
@@ -133,15 +133,25 @@ class ExecutorAgent(BaseAgent):
                 "| Security breach via MCP subprocess | Low | Critical | Containerize all third-party MCP servers |\n"
             )
 
+        prompt = (
+            f"You have been assigned the subtask: {subtask_title}\n"
+            f"Subtask Details: {subtask_desc}\n\n"
+            f"Context from prior agents (use as reference, do not repeat verbatim):\n"
+            f"{context}\n\n"
+        )
+        if verifier_feedback:
+            prompt += (
+                f"🚨 ATTENTION: A previous output was rejected by the Verifier with the following feedback:\n"
+                f"\"\"\"\n{verifier_feedback}\n\"\"\"\n"
+                f"Please address this feedback directly, fix any errors, and output a corrected, polished version.\n\n"
+            )
+        prompt += (
+            "Generate the complete, finalized output for this subtask. "
+            "Be concise, accurate, and structured. Avoid padding or repeating context already provided."
+        )
+
         output = await self.execute_llm(
-            prompt=(
-                f"You have been assigned the subtask: {subtask_title}\n"
-                f"Subtask Details: {subtask_desc}\n\n"
-                f"Context from prior agents (use as reference, do not repeat verbatim):\n"
-                f"{context}\n\n"
-                "Generate the complete, finalized output for this subtask. "
-                "Be concise, accurate, and structured. Avoid padding or repeating context already provided."
-            ),
+            prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
             mock_response_content=mock_execution_output,

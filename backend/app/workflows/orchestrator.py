@@ -185,14 +185,19 @@ async def reasoner_node(state: AgentState) -> Dict[str, Any]:
 async def executor_node(state: AgentState) -> Dict[str, Any]:
     task_id = state["task_id"]
     idx = state["current_subtask_index"]
-    subtask = state["subtasks"][idx]
+    
+    if idx >= len(state["subtasks"]):
+        # Retrieve the last executor subtask when retrying
+        exec_subs = [s for s in state["subtasks"] if s["assigned_agent"] == "executor"]
+        subtask = exec_subs[-1] if exec_subs else state["subtasks"][-1]
+    else:
+        subtask = state["subtasks"][idx]
+        
     subtask_id = subtask["id"]
     
     update_subtask_in_db(subtask_id, "running")
     
     # Gather previous context, then truncate to keep the LLM prompt compact.
-    # The Executor synthesises — it does not need the full verbatim text from
-    # every prior agent; a dense summary window is sufficient.
     context_full = "\n\n".join([
         f"--- Context: {sub['title']} ---\n{output}"
         for sub_id, output in state["agent_outputs"].items()
@@ -200,12 +205,14 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     ])
     context = _truncate_context(context_full, _EXECUTOR_CONTEXT_CHAR_LIMIT, "Executor")
     
+    feedback = state.get("verifier_feedback", "")
     output = await executor_agent.run_subtask(
         subtask_title=subtask["title"],
         subtask_desc=subtask["description"],
         context=context,
         task_id=task_id,
-        subtask_id=subtask_id
+        subtask_id=subtask_id,
+        verifier_feedback=feedback
     )
     
     update_subtask_in_db(subtask_id, "completed", output=output)
@@ -213,9 +220,11 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     outputs = state["agent_outputs"].copy()
     outputs[subtask_id] = output
     
+    new_idx = idx if idx >= len(state["subtasks"]) else idx + 1
+    
     return {
         "agent_outputs": outputs,
-        "current_subtask_index": idx + 1
+        "current_subtask_index": new_idx
     }
 
 async def memory_node(state: AgentState) -> Dict[str, Any]:
@@ -246,6 +255,7 @@ async def memory_node(state: AgentState) -> Dict[str, Any]:
 async def verifier_node(state: AgentState) -> Dict[str, Any]:
     task_id = state["task_id"]
     prompt = state["prompt"]
+    retry_count = state.get("retry_count", 0)
     
     # Gather final output from the Executor subtask(s)
     executor_outputs = []
@@ -257,8 +267,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
     exec_content = "\n\n".join(executor_outputs) if executor_outputs else "\n\n".join(state["agent_outputs"].values())
     
     # Run verification
-    # We will log verification on the task level (subtask_id=None or create a verification log entry)
-    verifier_agent.log_db(task_id, None, "thinking", "Starting final verification checks...")
+    verifier_agent.log_db(task_id, None, "thinking", f"Starting final verification checks (Attempt {retry_count + 1})...")
     result = await verifier_agent.verify_output(
         original_goal=prompt,
         generated_output=exec_content,
@@ -266,18 +275,45 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         subtask_id=None
     )
     
+    # Check if verification failed and we have retries left
+    if not result.is_valid and retry_count < 3:
+        msg = (
+            f"🛡️ [Self-Healing] Verification failed (score: {result.confidence_score:.2f}). "
+            f"Feedback: {result.feedback}\n"
+            f"Routing back to Executor (Attempt {retry_count + 1}/3)..."
+        )
+        verifier_agent.log_db(task_id, None, "thinking", msg)
+        logger.warning(msg)
+        
+        # Mark verifier subtask in database as running/retrying
+        for sub in state["subtasks"]:
+            if sub["assigned_agent"] == "verifier":
+                update_subtask_in_db(sub["id"], "running", output=f"Verification failed. Feedback: {result.feedback}")
+                
+        return {
+            "verification_results": {
+                "is_valid": result.is_valid,
+                "confidence_score": result.confidence_score,
+                "feedback": result.feedback
+            },
+            "verifier_feedback": result.feedback,
+            "retry_count": retry_count + 1
+        }
+    
+    # Final success or retry limit reached: complete task
     # Save the resulting memory learning
     memory_agent.store_memory(
         content=f"Learned from goal '{prompt[:80]}...': Verification Confidence Score: {result.confidence_score:.2f}. Key observations: {result.feedback}",
         category="factual"
     )
     
-    update_task_in_db(task_id, "completed", final_result=result.verified_output)
+    status = "completed" if result.is_valid else "failed"
+    update_task_in_db(task_id, status, final_result=result.verified_output)
     
     # Update the verifier subtask in database if one exists
     for sub in state["subtasks"]:
         if sub["assigned_agent"] == "verifier":
-            update_subtask_in_db(sub["id"], "completed", output=result.verified_output, confidence_score=result.confidence_score)
+            update_subtask_in_db(sub["id"], status, output=result.verified_output, confidence_score=result.confidence_score)
             
     return {
         "verification_results": {
@@ -285,6 +321,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             "confidence_score": result.confidence_score,
             "feedback": result.feedback
         },
+        "verifier_feedback": "",
         "final_result": result.verified_output
     }
 
@@ -308,11 +345,17 @@ def route_subtasks(state: AgentState) -> Literal["researcher", "reasoner", "exec
     elif agent == "memory_agent":
         return "memory_agent"
     elif agent == "verifier":
-        # If the planner explicitly generated a verifier task, route to verifier.
         return "verifier"
     else:
-        # Fallback to executor
         return "executor"
+
+def route_verifier_output(state: AgentState) -> Literal["executor", "__end__"]:
+    v_res = state.get("verification_results", {})
+    retry_count = state.get("retry_count", 0)
+    
+    if v_res and not v_res.get("is_valid", True) and retry_count < 3:
+        return "executor"
+    return "__end__"
 
 # Build and compile graph
 builder = StateGraph(AgentState)
@@ -351,6 +394,14 @@ for node in ["researcher", "reasoner", "executor", "memory_agent"]:
         }
     )
 
-builder.add_edge("verifier", END)
+builder.add_conditional_edges(
+    "verifier",
+    route_verifier_output,
+    {
+        "executor": "executor",
+        "__end__": END
+    }
+)
+
 
 orchestrator_graph = builder.compile()

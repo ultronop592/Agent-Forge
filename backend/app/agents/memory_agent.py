@@ -1,7 +1,11 @@
+import json
+import logging
 from typing import List, Dict, Any
 from backend.app.agents.base import BaseAgent
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Memory
+
+logger = logging.getLogger("agentforge.agents.memory")
 
 class MemoryAgent(BaseAgent):
     def __init__(self):
@@ -14,21 +18,74 @@ class MemoryAgent(BaseAgent):
             )
         )
 
+    def get_embedding(self, text: str) -> List[float]:
+        if not self.has_llm:
+            # Fallback mock embedding in case LLM is disabled/offline
+            return [0.1] * 768
+        try:
+            # Request embedding vector using Gemini model
+            response = self.client.models.embed_content(
+                model="models/gemini-embedding-001",
+                contents=text
+            )
+            if response and response.embeddings:
+                return response.embeddings[0].values
+            return [0.1] * 768
+        except Exception as e:
+            logger.error(f"Failed to generate embedding via API: {e}")
+            return [0.1] * 768
+
+    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
+        if len(a) != len(b):
+            return 0.0
+        dot_product = sum(x * y for x, y in zip(a, b))
+        norm_a = sum(x * x for x in a) ** 0.5
+        norm_b = sum(y * y for y in b) ** 0.5
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot_product / (norm_a * norm_b)
+
     def retrieve_memories(self, query: str, category: str = "factual") -> List[Dict[str, Any]]:
         db = SessionLocal()
         try:
-            # Basic keyword containment search for SQLite database
-            words = query.lower().split()
+            # 1. Fetch query vector
+            query_vector = self.get_embedding(query)
+            
+            # 2. Fetch all memories for the category
             all_mems = db.query(Memory).filter(Memory.category == category).all()
             
             results = []
             for mem in all_mems:
-                score = 0
+                score = 0.0
                 content_lower = mem.content.lower()
-                for word in words:
-                    if word in content_lower:
-                        score += 1
-                if score > 0 or not words:
+                
+                # Check if it contains serialized JSON embedding
+                if mem.embedding_searchable_text:
+                    try:
+                        vector = json.loads(mem.embedding_searchable_text)
+                        if isinstance(vector, list) and len(vector) > 0 and isinstance(vector[0], (int, float)):
+                            score = self._cosine_similarity(query_vector, vector)
+                            if score < 0.60:
+                                score = 0.0
+                        else:
+                            # Not a list, treat as legacy text containment fallback
+                            score = 0.0
+                    except json.JSONDecodeError:
+                        # Fallback keyword match for legacy non-embedding memories
+                        score = 0.0
+                
+                # If no embedding match or embedding parsing failed, use simple keyword containment fallback
+                if score == 0.0:
+                    words = query.lower().split()
+                    word_matches = sum(1 for w in words if w in content_lower)
+                    # Normalize word matches to a small score range [0.0 - 0.2] to prioritize semantic vectors
+                    if words:
+                        score = (word_matches / len(words)) * 0.2
+                    else:
+                        score = 0.0
+                
+                # Only keep matches that are reasonably relevant
+                if score > 0.05:
                     results.append((score, mem.to_dict()))
             
             # Sort by search score descending
@@ -43,10 +100,14 @@ class MemoryAgent(BaseAgent):
     def store_memory(self, content: str, category: str = "factual") -> Dict[str, Any]:
         db = SessionLocal()
         try:
+            # Generate embedding
+            embedding = self.get_embedding(content)
+            embedding_json = json.dumps(embedding)
+            
             mem = Memory(
                 category=category,
                 content=content,
-                embedding_searchable_text=content[:200]
+                embedding_searchable_text=embedding_json
             )
             db.add(mem)
             db.commit()
