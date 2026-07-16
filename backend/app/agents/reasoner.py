@@ -1,4 +1,5 @@
 from backend.app.agents.base import BaseAgent
+from backend.app.agents.token_budget import compute_token_budget
 
 class ReasonerAgent(BaseAgent):
     def __init__(self):
@@ -56,11 +57,18 @@ class ReasonerAgent(BaseAgent):
             "- **Observability**: Implement OpenTelemetry spans per agent node to trace per-call latency in LangGraph.\n"
         )
 
+        token_budget = compute_token_budget(
+            subtask_title=subtask_title,
+            subtask_desc=subtask_desc,
+            context=previous_outputs,
+            agent="reasoner",
+        )
+
         output = await self.execute_llm(
             prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
             mock_response_content=mock_reasoning_doc,
-            max_output_tokens=2048
+            max_output_tokens=token_budget
         )
         return output

@@ -28,7 +28,11 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
             "verification_results": {},
             "final_result": "",
             "retry_count": 0,
-            "verifier_feedback": ""
+            "verifier_feedback": "",
+            # ── Manager Agent tracking ────────────────────────────────
+            "manager_quality_scores": {},
+            "manager_skip_flags": {},
+            "agent_retry_counts": {},
         }
         
         # Invoke the compiled LangGraph flow

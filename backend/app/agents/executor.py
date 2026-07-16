@@ -1,4 +1,5 @@
 from backend.app.agents.base import BaseAgent
+from backend.app.agents.token_budget import compute_token_budget
 
 class ExecutorAgent(BaseAgent):
     def __init__(self):
@@ -150,11 +151,19 @@ class ExecutorAgent(BaseAgent):
             "Be concise, accurate, and structured. Avoid padding or repeating context already provided."
         )
 
+        token_budget = compute_token_budget(
+            subtask_title=subtask_title,
+            subtask_desc=subtask_desc,
+            context=context,
+            agent="executor",
+        )
+
         output = await self.execute_llm(
             prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
             mock_response_content=mock_execution_output,
-            max_output_tokens=2048
+            max_output_tokens=token_budget
         )
         return output
+

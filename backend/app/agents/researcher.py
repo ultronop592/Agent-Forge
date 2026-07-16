@@ -3,6 +3,7 @@ import logging
 import httpx
 from typing import Dict, Any, List
 from backend.app.agents.base import BaseAgent
+from backend.app.agents.token_budget import compute_token_budget
 from backend.app.core.config import settings
 
 logger = logging.getLogger("agentforge.agents.researcher")
@@ -131,11 +132,17 @@ class ResearcherAgent(BaseAgent):
             "- [Gartner Hype Cycle 2024](https://gartner.com) — Enterprise readiness signals\n"
         )
 
+        token_budget = compute_token_budget(
+            subtask_title=subtask_title,
+            subtask_desc=subtask_desc,
+            agent="researcher",
+        )
+
         output = await self.execute_llm(
             prompt=prompt,
             task_id=task_id,
             subtask_id=subtask_id,
             mock_response_content=mock_research_doc,
-            max_output_tokens=3000
+            max_output_tokens=token_budget
         )
         return output

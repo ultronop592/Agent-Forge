@@ -33,20 +33,22 @@ export default function AgentTerminal({ logs }: AgentTerminalProps) {
 
   const getLogColor = (type: string) => {
     switch (type) {
-      case "thinking": return "text-blue-400";
-      case "tool_call": return "text-amber-400";
-      case "output": return "text-emerald-400";
-      case "error": return "text-rose-400 font-semibold";
+      case "thinking":         return "text-blue-400";
+      case "tool_call":        return "text-amber-400";
+      case "output":           return "text-emerald-400";
+      case "error":            return "text-rose-400 font-semibold";
+      case "manager_decision": return "text-amber-300 font-semibold";
       default: return "text-slate-300";
     }
   };
 
   const getLogIcon = (type: string) => {
     switch (type) {
-      case "thinking": return <Info className="w-3.5 h-3.5 inline mr-1.5 text-blue-500 shrink-0" />;
-      case "tool_call": return <ExternalLink className="w-3.5 h-3.5 inline mr-1.5 text-amber-500 shrink-0" />;
-      case "output": return <CheckCircle className="w-3.5 h-3.5 inline mr-1.5 text-emerald-500 shrink-0" />;
-      case "error": return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-rose-500 shrink-0" />;
+      case "thinking":         return <Info      className="w-3.5 h-3.5 inline mr-1.5 text-blue-500 shrink-0" />;
+      case "tool_call":        return <ExternalLink className="w-3.5 h-3.5 inline mr-1.5 text-amber-500 shrink-0" />;
+      case "output":           return <CheckCircle className="w-3.5 h-3.5 inline mr-1.5 text-emerald-500 shrink-0" />;
+      case "error":            return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-rose-500 shrink-0" />;
+      case "manager_decision": return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-amber-400 shrink-0" />;
       default: return null;
     }
   };
@@ -71,6 +73,7 @@ export default function AgentTerminal({ logs }: AgentTerminalProps) {
             <option value="thinking">Thinking Logs</option>
             <option value="tool_call">Tool Executions</option>
             <option value="output">Outputs</option>
+            <option value="manager_decision">Manager Decisions</option>
             <option value="error">Errors</option>
           </select>
         </div>
@@ -97,7 +100,12 @@ export default function AgentTerminal({ logs }: AgentTerminalProps) {
                     {log.log_type}
                   </span>
                 </div>
-                <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] ${log.log_type === "thinking" ? "text-slate-300" : log.log_type === "output" ? "text-slate-200" : getLogColor(log.log_type)}`}>
+                <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] ${
+                  log.log_type === "thinking"         ? "text-slate-300"
+                  : log.log_type === "output"         ? "text-slate-200"
+                  : log.log_type === "manager_decision" ? "text-amber-200 bg-amber-950/20 border border-amber-900/30 rounded px-2 py-1.5"
+                  : getLogColor(log.log_type)
+                }`}>
                   {getLogIcon(log.log_type)}
                   {log.content}
                 </div>
