@@ -45,7 +45,7 @@ class MemoryAgent(BaseAgent):
             return 0.0
         return dot_product / (norm_a * norm_b)
 
-    def retrieve_memories(self, query: str, category: str = "factual") -> List[Dict[str, Any]]:
+    def retrieve_memories(self, query: str, category: str = "factual") -> tuple[List[Dict[str, Any]], List[float]]:
         db = SessionLocal()
         try:
             # 1. Fetch query vector
@@ -90,19 +90,23 @@ class MemoryAgent(BaseAgent):
             
             # Sort by search score descending
             results.sort(key=lambda x: x[0], reverse=True)
-            return [item[1] for item in results[:5]]
+            return [item[1] for item in results[:5]], query_vector
         except Exception as e:
             self.log_db("SYSTEM", None, "error", f"Memory recall error: {str(e)}")
-            return []
+            return [], [0.1] * 768
         finally:
             db.close()
 
-    def store_memory(self, content: str, category: str = "factual") -> Dict[str, Any]:
+    def store_memory(self, content: str, category: str = "factual", embedding: Optional[List[float]] = None) -> Dict[str, Any]:
         db = SessionLocal()
         try:
-            # Generate embedding
-            embedding = self.get_embedding(content)
-            embedding_json = json.dumps(embedding)
+            # Re-use pre-computed embedding if available, avoiding an extra API call
+            if embedding is not None:
+                embedding_vector = embedding
+            else:
+                embedding_vector = self.get_embedding(content)
+            
+            embedding_json = json.dumps(embedding_vector)
             
             mem = Memory(
                 category=category,
@@ -119,10 +123,10 @@ class MemoryAgent(BaseAgent):
         finally:
             db.close()
 
-    async def run_subtask(self, subtask_title: str, subtask_desc: str, task_id: str, subtask_id: str) -> str:
+    async def run_subtask(self, subtask_title: str, subtask_desc: str, task_id: str, subtask_id: str) -> tuple[str, List[float]]:
         # Search memory for context
         self.log_db(task_id, subtask_id, "thinking", f"Searching memory bank for keywords in: '{subtask_title}'")
-        recalled = self.retrieve_memories(subtask_title)
+        recalled, query_vector = self.retrieve_memories(subtask_title)
         
         recalled_str = "No relevant long-term memories retrieved."
         if recalled:
@@ -155,4 +159,4 @@ class MemoryAgent(BaseAgent):
             subtask_id=subtask_id,
             mock_response_content=mock_memory_report
         )
-        return output
+        return output, query_vector

@@ -12,10 +12,10 @@ class VerifierAgent(BaseAgent):
         super().__init__(
             name="Verifier",
             system_instruction=(
-                "You are the Quality Control & Verification Agent. Your job is to verify factual consistency, "
-                "detect hallucinations, validate outputs against requirements, and refine spelling/grammar/layout. "
-                "You must compute an objective confidence score (0.0 to 1.0) and output a JSON object containing "
-                "the confidence score, qualitative feedback, whether the content is valid, and the final polished text."
+                "You are the Lead QA & Verification Agent. Your job is to perform both factual consistency verification "
+                "and quality evaluation. Check if the output has hallucinations, is complete, meets all subtask criteria, "
+                "and is well-structured. If it has gaps, syntax issues, or poor quality, mark is_valid=false and provide "
+                "constructive correction feedback. Refine spelling, formatting, and layout for the final output."
             )
         )
 

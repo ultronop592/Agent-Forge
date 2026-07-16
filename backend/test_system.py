@@ -54,7 +54,11 @@ async def run_test():
             "verification_results": {},
             "final_result": "",
             "retry_count": 0,
-            "verifier_feedback": ""
+            "verifier_feedback": "",
+            "prompt_embedding": [],
+            "manager_quality_scores": {},
+            "manager_skip_flags": {},
+            "agent_retry_counts": {}
         }
         
         await orchestrator_graph.ainvoke(initial_state)

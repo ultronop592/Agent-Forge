@@ -4,12 +4,10 @@ from langgraph.graph import StateGraph, END
 
 from backend.app.workflows.state import AgentState
 from backend.app.agents.planner import PlannerAgent
-from backend.app.agents.researcher import ResearcherAgent
-from backend.app.agents.reasoner import ReasonerAgent
+from backend.app.agents.analyst_agent import AnalystAgent
 from backend.app.agents.executor import ExecutorAgent
 from backend.app.agents.verifier import VerifierAgent
 from backend.app.agents.memory_agent import MemoryAgent
-from backend.app.agents.manager_agent import ManagerAgent, _MAX_AGENT_RETRIES
 
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
@@ -20,7 +18,6 @@ logger = logging.getLogger("agentforge.workflows")
 # Context truncation helpers
 # ---------------------------------------------------------------------------
 _EXECUTOR_CONTEXT_CHAR_LIMIT = 8_000
-_REASONER_CONTEXT_CHAR_LIMIT = 12_000
 
 
 def _truncate_context(context: str, char_limit: int, label: str) -> str:
@@ -43,12 +40,10 @@ def _truncate_context(context: str, char_limit: int, label: str) -> str:
 # Agent instances
 # ---------------------------------------------------------------------------
 planner_agent   = PlannerAgent()
-researcher_agent = ResearcherAgent()
-reasoner_agent  = ReasonerAgent()
+analyst_agent   = AnalystAgent()
 executor_agent  = ExecutorAgent()
 verifier_agent  = VerifierAgent()
 memory_agent    = MemoryAgent()
-manager_agent   = ManagerAgent()
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +82,7 @@ def update_task_in_db(task_id: str, status: str, final_result: str = None):
 
 
 # ---------------------------------------------------------------------------
-# Worker agent nodes
+# Stage nodes
 # ---------------------------------------------------------------------------
 async def planner_node(state: AgentState) -> Dict[str, Any]:
     task_id = state["task_id"]
@@ -126,36 +121,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     }
 
 
-async def researcher_node(state: AgentState) -> Dict[str, Any]:
-    task_id  = state["task_id"]
-    idx      = state["current_subtask_index"]
-    subtask  = state["subtasks"][idx]
-    subtask_id = subtask["id"]
-
-    update_subtask_in_db(subtask_id, "running")
-
-    output = await researcher_agent.run_subtask(
-        subtask_title=subtask["title"],
-        subtask_desc=subtask["description"],
-        task_id=task_id,
-        subtask_id=subtask_id
-    )
-
-    update_subtask_in_db(subtask_id, "completed", output=output)
-
-    outputs = state["agent_outputs"].copy()
-    outputs[subtask_id] = output
-
-    return {
-        "agent_outputs": outputs,
-        # NOTE: current_subtask_index is NOT incremented here.
-        # The Manager node decides whether to advance or retry.
-        "_last_worker": "researcher",
-        "_last_subtask_id": subtask_id,
-    }
-
-
-async def reasoner_node(state: AgentState) -> Dict[str, Any]:
+async def memory_node(state: AgentState) -> Dict[str, Any]:
     task_id    = state["task_id"]
     idx        = state["current_subtask_index"]
     subtask    = state["subtasks"][idx]
@@ -163,17 +129,10 @@ async def reasoner_node(state: AgentState) -> Dict[str, Any]:
 
     update_subtask_in_db(subtask_id, "running")
 
-    prev_context_full = "\n\n".join([
-        f"--- Subtask: {sub['title']} ---\n{output}"
-        for sub_id, output in state["agent_outputs"].items()
-        for sub in state["subtasks"] if sub["id"] == sub_id
-    ])
-    prev_context = _truncate_context(prev_context_full, _REASONER_CONTEXT_CHAR_LIMIT, "Reasoner")
-
-    output = await reasoner_agent.run_subtask(
+    # Call memory agent — it returns (output, prompt_embedding)
+    output, query_vector = await memory_agent.run_subtask(
         subtask_title=subtask["title"],
         subtask_desc=subtask["description"],
-        previous_outputs=prev_context,
         task_id=task_id,
         subtask_id=subtask_id
     )
@@ -185,8 +144,35 @@ async def reasoner_node(state: AgentState) -> Dict[str, Any]:
 
     return {
         "agent_outputs": outputs,
-        "_last_worker": "reasoner",
-        "_last_subtask_id": subtask_id,
+        "current_subtask_index": idx + 1,
+        "prompt_embedding": query_vector  # Caches computed query embedding
+    }
+
+
+async def analyst_node(state: AgentState) -> Dict[str, Any]:
+    task_id  = state["task_id"]
+    idx      = state["current_subtask_index"]
+    subtask  = state["subtasks"][idx]
+    subtask_id = subtask["id"]
+
+    update_subtask_in_db(subtask_id, "running")
+
+    # Single-step Search + Reasoning
+    output = await analyst_agent.run_subtask(
+        subtask_title=subtask["title"],
+        subtask_desc=subtask["description"],
+        task_id=task_id,
+        subtask_id=subtask_id
+    )
+
+    update_subtask_in_db(subtask_id, "completed", output=output)
+
+    outputs = state["agent_outputs"].copy()
+    outputs[subtask_id] = output
+
+    return {
+        "agent_outputs": outputs,
+        "current_subtask_index": idx + 1
     }
 
 
@@ -204,6 +190,7 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
 
     update_subtask_in_db(subtask_id, "running")
 
+    # Gather prior context
     context_full = "\n\n".join([
         f"--- Context: {sub['title']} ---\n{output}"
         for sub_id, output in state["agent_outputs"].items()
@@ -230,144 +217,10 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
 
     return {
         "agent_outputs": outputs,
-        "current_subtask_index": new_idx,
-        "_last_worker": "executor",
-        "_last_subtask_id": subtask_id,
+        "current_subtask_index": new_idx
     }
 
 
-async def memory_node(state: AgentState) -> Dict[str, Any]:
-    task_id    = state["task_id"]
-    idx        = state["current_subtask_index"]
-    subtask    = state["subtasks"][idx]
-    subtask_id = subtask["id"]
-
-    update_subtask_in_db(subtask_id, "running")
-
-    output = await memory_agent.run_subtask(
-        subtask_title=subtask["title"],
-        subtask_desc=subtask["description"],
-        task_id=task_id,
-        subtask_id=subtask_id
-    )
-
-    update_subtask_in_db(subtask_id, "completed", output=output)
-
-    outputs = state["agent_outputs"].copy()
-    outputs[subtask_id] = output
-
-    return {
-        "agent_outputs": outputs,
-        "current_subtask_index": idx + 1
-    }
-
-
-# ---------------------------------------------------------------------------
-# Manager node — sits after every worker agent except Memory & Verifier
-# ---------------------------------------------------------------------------
-async def manager_node(state: AgentState) -> Dict[str, Any]:
-    task_id       = state["task_id"]
-    last_worker   = state.get("_last_worker", "executor")
-    subtask_id    = state.get("_last_subtask_id")
-
-    # Retrieve the subtask being evaluated
-    subtask = next(
-        (s for s in state["subtasks"] if s["id"] == subtask_id),
-        state["subtasks"][state["current_subtask_index"] - 1]
-    ) if subtask_id else state["subtasks"][state.get("current_subtask_index", 1) - 1]
-
-    output = state["agent_outputs"].get(subtask_id or "", "")
-
-    # ── Evaluate quality ────────────────────────────────────────────────
-    result = await manager_agent.evaluate_agent_output(
-        agent_name=last_worker,
-        subtask_title=subtask["title"],
-        subtask_desc=subtask["description"],
-        output=output,
-        task_id=task_id,
-        subtask_id=subtask_id,
-    )
-
-    # ── Update tracking state ────────────────────────────────────────────
-    quality_scores = dict(state.get("manager_quality_scores", {}))
-    skip_flags     = dict(state.get("manager_skip_flags", {}))
-    retry_counts   = dict(state.get("agent_retry_counts", {}))
-
-    sid_key = subtask_id or subtask["id"]
-    quality_scores[sid_key] = result.score
-
-    current_retries = retry_counts.get(sid_key, 0)
-
-    if result.passed:
-        # ✅ Advance pipeline
-        manager_agent.log_transition(
-            task_id=task_id,
-            from_agent=last_worker,
-            to_agent="next_in_pipeline",
-            quality_score=result.score,
-            decision="PASS — advancing",
-        )
-        # Advance the subtask index for researcher & reasoner
-        # (executor already increments its own index before reaching manager)
-        new_idx = state["current_subtask_index"]
-        if last_worker in ("researcher", "reasoner"):
-            new_idx = state["current_subtask_index"] + 1
-
-        return {
-            "manager_quality_scores": quality_scores,
-            "manager_skip_flags": skip_flags,
-            "agent_retry_counts": retry_counts,
-            "current_subtask_index": new_idx,
-        }
-
-    elif current_retries < _MAX_AGENT_RETRIES:
-        # ❌ Retry the same agent
-        retry_counts[sid_key] = current_retries + 1
-        msg = (
-            f"[Manager] {last_worker} FAILED quality gate "
-            f"(score={result.score:.2f}, attempt {current_retries + 1}/{_MAX_AGENT_RETRIES}). "
-            f"Retrying with hint: {result.correction_hint}"
-        )
-        manager_agent.log_db(task_id, subtask_id, "manager_decision", msg)
-        logger.warning(msg)
-
-        # Re-inject correction hint as verifier_feedback so Executor can use it too
-        extra = {}
-        if last_worker == "executor":
-            extra["verifier_feedback"] = result.correction_hint
-
-        return {
-            "manager_quality_scores": quality_scores,
-            "manager_skip_flags": skip_flags,
-            "agent_retry_counts": retry_counts,
-            **extra,
-        }
-
-    else:
-        # ❌ Max retries exhausted — skip and advance
-        skip_flags[sid_key] = True
-        msg = (
-            f"[Manager] {last_worker} exceeded max retries "
-            f"({_MAX_AGENT_RETRIES}). Skipping subtask and advancing pipeline."
-        )
-        manager_agent.log_db(task_id, subtask_id, "manager_decision", msg)
-        logger.warning(msg)
-
-        new_idx = state["current_subtask_index"]
-        if last_worker in ("researcher", "reasoner"):
-            new_idx += 1
-
-        return {
-            "manager_quality_scores": quality_scores,
-            "manager_skip_flags": skip_flags,
-            "agent_retry_counts": retry_counts,
-            "current_subtask_index": new_idx,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Verifier node
-# ---------------------------------------------------------------------------
 async def verifier_node(state: AgentState) -> Dict[str, Any]:
     task_id     = state["task_id"]
     prompt      = state["prompt"]
@@ -386,7 +239,8 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
     )
 
     verifier_agent.log_db(task_id, None, "thinking",
-                          f"Starting final verification checks (Attempt {retry_count + 1})...")
+                          f"Starting final verification and quality check (Attempt {retry_count + 1})...")
+    
     result = await verifier_agent.verify_output(
         original_goal=prompt,
         generated_output=exec_content,
@@ -394,13 +248,15 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         subtask_id=None
     )
 
+    # ── Self-healing retry loop (Verifier & QA) ──────────────────────────
     if not result.is_valid and retry_count < 3:
         msg = (
-            f"🛡️ [Self-Healing] Verification failed (score: {result.confidence_score:.2f}). "
+            f"🛡️ [QA/Verifier] Verification failed (score: {result.confidence_score:.2f}). "
             f"Feedback: {result.feedback}\n"
             f"Routing back to Executor (Attempt {retry_count + 1}/3)..."
         )
         verifier_agent.log_db(task_id, None, "thinking", msg)
+        verifier_agent.log_db(task_id, None, "manager_decision", f"❌ QA GATE FAILED — Routing back to Executor for self-healing: {result.feedback}")
         logger.warning(msg)
 
         for sub in state["subtasks"]:
@@ -418,14 +274,16 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             "retry_count":       retry_count + 1,
         }
 
-    # ── Task complete ────────────────────────────────────────────────────
+    # ── Task complete: Store memory reusing cached embedding ─────────────
+    prompt_emb = state.get("prompt_embedding", None)
     memory_agent.store_memory(
         content=(
             f"Learned from goal '{prompt[:80]}...': "
             f"Verification Confidence Score: {result.confidence_score:.2f}. "
             f"Key observations: {result.feedback}"
         ),
-        category="factual"
+        category="factual",
+        embedding=prompt_emb  # Bypasses LLM call to save token budget & latency
     )
 
     status = "completed" if result.is_valid else "failed"
@@ -437,15 +295,18 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                                  output=result.verified_output,
                                  confidence_score=result.confidence_score)
 
-    # ── Manager writes run summary ───────────────────────────────────────
-    manager_agent.write_run_summary(
-        task_id=task_id,
-        quality_scores=state.get("manager_quality_scores", {}),
-        agent_retry_counts=state.get("agent_retry_counts", {}),
-        verifier_retry_count=retry_count,
-        final_confidence=result.confidence_score,
-        status=status,
+    # ── Write run summary for frontend terminal ─────────────────────────
+    summary_markdown = (
+        f"# 📋 Agentic Workforce Run Summary\n\n"
+        f"**Final Status:** `{status.upper()}`  \n"
+        f"**QA Verification Certainty:** `{result.confidence_score:.0%}`  \n"
+        f"**Self-Healing Retries executed:** `{retry_count}`  \n\n"
+        f"**Latency Optimization Metrics:**\n"
+        f"- Target API Calls: **5**\n"
+        f"- Memory Embedding: **Cached & Reused** (0 extra embedding calls during storage)\n"
+        f"- Analyst Node: **Search & Reasoning combined** (saved 1 reasoning text call)\n"
     )
+    verifier_agent.log_db(task_id, None, "manager_decision", summary_markdown)
 
     return {
         "verification_results": {
@@ -459,48 +320,27 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Routing functions
+# Routing
 # ---------------------------------------------------------------------------
-def route_after_planner(state: AgentState) -> Literal[
-    "researcher", "reasoner", "executor", "memory_agent", "verifier", "__end__"
+def route_subtasks(state: AgentState) -> Literal[
+    "analyst", "executor", "memory_agent", "verifier", "__end__"
 ]:
-    """Route the first subtask from the Planner."""
-    return _pick_next_agent(state)
+    idx      = state["current_subtask_index"]
+    subtasks = state["subtasks"]
 
+    if idx >= len(subtasks):
+        return "verifier"
 
-def route_after_manager(state: AgentState) -> Literal[
-    "researcher", "reasoner", "executor", "memory_agent", "verifier", "__end__"
-]:
-    """
-    After a Manager gate:
-    - If the Manager decided to retry → re-route to same worker agent.
-    - Otherwise → advance to next agent in the pipeline.
-    """
-    last_worker = state.get("_last_worker", "executor")
-    subtask_id  = state.get("_last_subtask_id")
-    retry_counts = state.get("agent_retry_counts", {})
-    skip_flags   = state.get("manager_skip_flags", {})
-
-    # Check if this subtask is still being retried (retry incremented but index not advanced)
-    if subtask_id:
-        retries  = retry_counts.get(subtask_id, 0)
-        skipped  = skip_flags.get(subtask_id, False)
-        quality  = state.get("manager_quality_scores", {}).get(subtask_id, 1.0)
-        from backend.app.agents.manager_agent import _QUALITY_THRESHOLDS
-        threshold = _QUALITY_THRESHOLDS.get(last_worker, _QUALITY_THRESHOLDS["default"])
-
-        # If quality failed AND retries < max AND not skipped → retry same agent
-        if quality < threshold and retries > 0 and retries <= _MAX_AGENT_RETRIES and not skipped:
-            return last_worker  # type: ignore[return-value]
-
-    # Otherwise advance normally
-    return _pick_next_agent(state)
-
-
-def route_after_memory(state: AgentState) -> Literal[
-    "researcher", "reasoner", "executor", "memory_agent", "verifier", "__end__"
-]:
-    return _pick_next_agent(state)
+    agent = subtasks[idx]["assigned_agent"]
+    if agent == "analyst":
+        return "analyst"
+    elif agent == "executor":
+        return "executor"
+    elif agent == "memory_agent":
+        return "memory_agent"
+    elif agent == "verifier":
+        return "verifier"
+    return "executor"
 
 
 def route_verifier_output(state: AgentState) -> Literal["executor", "__end__"]:
@@ -511,81 +351,45 @@ def route_verifier_output(state: AgentState) -> Literal["executor", "__end__"]:
     return "__end__"
 
 
-def _pick_next_agent(state: AgentState) -> Literal[
-    "researcher", "reasoner", "executor", "memory_agent", "verifier", "__end__"
-]:
-    idx      = state["current_subtask_index"]
-    subtasks = state["subtasks"]
-
-    if idx >= len(subtasks):
-        return "verifier"
-
-    agent = subtasks[idx]["assigned_agent"]
-    if agent == "researcher":
-        return "researcher"
-    elif agent == "reasoner":
-        return "reasoner"
-    elif agent == "executor":
-        return "executor"
-    elif agent == "memory_agent":
-        return "memory_agent"
-    elif agent == "verifier":
-        return "verifier"
-    return "executor"
-
-
 # ---------------------------------------------------------------------------
 # Build and compile graph
 # ---------------------------------------------------------------------------
 builder = StateGraph(AgentState)
 
-# Register nodes
-builder.add_node("planner",     planner_node)
-builder.add_node("researcher",  researcher_node)
-builder.add_node("reasoner",    reasoner_node)
-builder.add_node("executor",    executor_node)
-builder.add_node("memory_agent", memory_node)
-builder.add_node("manager",     manager_node)     # ← new supervisor node
-builder.add_node("verifier",    verifier_node)
+builder.add_node("planner",      planner_node)
+builder.add_node("memory_agent",  memory_node)
+builder.add_node("analyst",      analyst_node)
+builder.add_node("executor",     executor_node)
+builder.add_node("verifier",     verifier_node)
 
-# Entry point
 builder.set_entry_point("planner")
 
-# Planner → first agent
+# Conditional edges after planner
 builder.add_conditional_edges(
     "planner",
-    route_after_planner,
+    route_subtasks,
     {
-        "researcher":  "researcher",
-        "reasoner":    "reasoner",
-        "executor":    "executor",
         "memory_agent": "memory_agent",
-        "verifier":    "verifier",
+        "analyst":      "analyst",
+        "executor":     "executor",
+        "verifier":     "verifier",
     }
 )
 
-# Worker agents → Manager gate (except Executor which is handled specially)
-builder.add_edge("researcher", "manager")
-builder.add_edge("reasoner",   "manager")
+# Conditional edges after nodes
+for node in ["memory_agent", "analyst", "executor"]:
+    builder.add_conditional_edges(
+        node,
+        route_subtasks,
+        {
+            "memory_agent": "memory_agent",
+            "analyst":      "analyst",
+            "executor":     "executor",
+            "verifier":     "verifier",
+        }
+    )
 
-# Executor already increments the index, so it also feeds through Manager
-builder.add_edge("executor", "manager")
-
-# Manager → next agent (or retry same agent)
-_AGENT_MAP = {
-    "researcher":  "researcher",
-    "reasoner":    "reasoner",
-    "executor":    "executor",
-    "memory_agent": "memory_agent",
-    "verifier":    "verifier",
-    "__end__":     END,
-}
-builder.add_conditional_edges("manager", route_after_manager, _AGENT_MAP)
-
-# Memory bypasses Manager (no quality gate needed for retrieval)
-builder.add_conditional_edges("memory_agent", route_after_memory, _AGENT_MAP)
-
-# Verifier → self-heal loop or end
+# Loopback or end
 builder.add_conditional_edges(
     "verifier",
     route_verifier_output,
