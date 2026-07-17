@@ -14,6 +14,13 @@ def list_agents() -> List[Dict[str, Any]]:
             "tools": ["Plan Decomposer"]
         },
         {
+            "name": "Manager",
+            "role": "Orchestration Supervisor",
+            "status": "idle",
+            "description": "Supervises multi-agent routing, coordinates parallel stages, logs pipeline transitions, and writes final run summaries.",
+            "tools": ["State Coordinator", "Pipeline Router"]
+        },
+        {
             "name": "Analyst",
             "role": "Research & SWOT Analyst",
             "status": "idle",

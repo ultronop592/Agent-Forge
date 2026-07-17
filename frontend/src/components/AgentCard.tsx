@@ -6,7 +6,8 @@ import {
   BrainCircuit, 
   FileCode, 
   ShieldCheck, 
-  FolderGit 
+  FolderGit,
+  Layers
 } from "lucide-react";
 
 interface AgentCardProps {
@@ -19,6 +20,7 @@ interface AgentCardProps {
 
 const AGENT_ICONS: Record<string, any> = {
   "Planner": Compass,
+  "Manager": Layers,
   "Analyst": Search,
   "Researcher": Search,
   "Reasoner": BrainCircuit,

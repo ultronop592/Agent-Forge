@@ -88,9 +88,15 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
   return (
     <div className="glass-panel border border-slate-800 rounded-xl p-5 flex flex-col h-full overflow-hidden shadow-xl">
       <div className="flex items-center justify-between mb-4 border-b border-slate-900 pb-3">
-        <h4 className="text-xs text-slate-300 font-semibold uppercase tracking-wider">
-          Active Workforce Collaborative Graph
-        </h4>
+        <div className="flex items-center gap-2.5">
+          <h4 className="text-xs text-slate-300 font-semibold uppercase tracking-wider">
+            Active Workforce Collaborative Graph
+          </h4>
+          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-bold text-amber-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Manager Overseeing
+          </span>
+        </div>
         <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
