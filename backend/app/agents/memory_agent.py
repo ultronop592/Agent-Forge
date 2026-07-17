@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from backend.app.agents.base import BaseAgent
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Memory
