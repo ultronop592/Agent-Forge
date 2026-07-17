@@ -67,8 +67,11 @@ function WorkspaceInner() {
   const [activeTab, setActiveTab] = useState<"graph" | "timeline" | "terminal" | "result">("graph");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [isStreaming, setIsStreaming] = useState(false);
+
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load plugins list on mount
   useEffect(() => {
@@ -104,6 +107,9 @@ function WorkspaceInner() {
     setFinalResult("");
     setConfidenceScore(null);
     setActiveTab("graph");
+    setIsStreaming(false);
+    reconnectAttemptsRef.current = 0;
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
   };
 
   const loadHistoricTask = async (id: string) => {
@@ -135,26 +141,53 @@ function WorkspaceInner() {
     }
   };
 
-  const connectStream = (id: string) => {
-    disconnectStream();
-    
+  const MAX_RECONNECT_ATTEMPTS = 5;
+
+  const connectStream = (id: string, attempt = 0) => {
+    // Close any existing connection first
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
     const streamUrl = api.getStreamUrl(id);
     const es = new EventSource(streamUrl);
     eventSourceRef.current = es;
-    
+    reconnectAttemptsRef.current = attempt;
+
+    es.onopen = () => {
+      // Reset reconnect counter on successful connect
+      reconnectAttemptsRef.current = 0;
+      setIsStreaming(true);
+    };
+
     es.onmessage = (event) => {
       try {
         const update = JSON.parse(event.data);
-        if (update.error) {
-          console.error("SSE stream error:", update.error);
+
+        // Ignore heartbeat comments — browser EventSource filters `: ping` automatically
+        // but guard against empty payloads just in case
+        if (!update || update.error) {
+          if (update?.error) console.error("SSE stream error:", update.error);
           return;
         }
-        
-        setTaskStatus(update.status);
-        setFinalResult(update.final_result || "");
-        setSubtasks(update.subtasks || []);
-        
+
+        // Backend signals clean completion
+        if (update.done) {
+          setIsStreaming(false);
+          if (update.status === "completed") setActiveTab("result");
+          disconnectStream();
+          return;
+        }
+
+        if (update.status) setTaskStatus(update.status);
+        if (update.final_result) setFinalResult(update.final_result);
+        if (update.subtasks)     setSubtasks(update.subtasks);
+
         if (update.new_logs && update.new_logs.length > 0) {
+          // Auto-switch to terminal tab the first time logs arrive
+          setActiveTab((prev) => prev === "graph" || prev === "timeline" ? "terminal" : prev);
+
           setLogs((prev) => {
             const existingIds = new Set(prev.map((l) => l.id));
             const freshLogs = update.new_logs.filter((l: LogEntry) => !existingIds.has(l.id));
@@ -162,15 +195,20 @@ function WorkspaceInner() {
           });
         }
 
-        const verifierSub = (update.subtasks || []).find((s: Subtask) => s.assigned_agent === "verifier");
-        if (verifierSub) {
-          setConfidenceScore(verifierSub.confidence_score || 0.95);
+        const verifierSub = (update.subtasks || []).find(
+          (s: Subtask) => s.assigned_agent === "verifier"
+        );
+        if (verifierSub?.confidence_score) {
+          setConfidenceScore(verifierSub.confidence_score);
         }
 
+        // Handle terminal states (in case done event is missed)
         if (update.status === "completed") {
+          setIsStreaming(false);
           setActiveTab("result");
           disconnectStream();
         } else if (update.status === "failed") {
+          setIsStreaming(false);
           disconnectStream();
         }
       } catch (err) {
@@ -179,15 +217,40 @@ function WorkspaceInner() {
     };
 
     es.onerror = () => {
-      disconnectStream();
+      // Don't reconnect if task is already done or max retries reached
+      es.close();
+      eventSourceRef.current = null;
+      setIsStreaming(false);
+
+      const nextAttempt = attempt + 1;
+      if (nextAttempt <= MAX_RECONNECT_ATTEMPTS) {
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt), 16000); // 1s,2s,4s,8s,16s
+        console.warn(`SSE disconnected. Reconnecting in ${backoffMs}ms (attempt ${nextAttempt}/${MAX_RECONNECT_ATTEMPTS})...`);
+        reconnectTimerRef.current = setTimeout(() => {
+          // Only reconnect if task is still running
+          setTaskStatus((currentStatus) => {
+            if (currentStatus === "running" || currentStatus === "pending") {
+              connectStream(id, nextAttempt);
+            }
+            return currentStatus;
+          });
+        }, backoffMs);
+      } else {
+        console.error("SSE max reconnect attempts reached. Stopping auto-reconnect.");
+      }
     };
   };
 
   const disconnectStream = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+    setIsStreaming(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -419,7 +482,7 @@ function WorkspaceInner() {
 
             {activeTab === "terminal" && (
               <div className="h-full">
-                <AgentTerminal logs={logs} />
+                <AgentTerminal logs={logs} isStreaming={isStreaming} />
               </div>
             )}
 

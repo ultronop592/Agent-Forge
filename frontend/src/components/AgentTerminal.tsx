@@ -15,9 +15,10 @@ interface LogEntry {
 
 interface AgentTerminalProps {
   logs: LogEntry[];
+  isStreaming?: boolean;
 }
 
-export default function AgentTerminal({ logs }: AgentTerminalProps) {
+export default function AgentTerminal({ logs, isStreaming = false }: AgentTerminalProps) {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<string>("all");
 
@@ -60,6 +61,13 @@ export default function AgentTerminal({ logs }: AgentTerminalProps) {
         <div className="flex items-center gap-2.5">
           <Terminal className="w-4 h-4 text-blue-500" />
           <span className="text-xs text-slate-300 font-semibold uppercase tracking-wider">Live Agent Thinking Console</span>
+          {/* LIVE streaming indicator */}
+          {isStreaming && (
+            <span className="flex items-center gap-1 ml-2 px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-700/40 text-[10px] font-bold text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+              LIVE
+            </span>
+          )}
         </div>
         
         {/* Terminal Controls */}
@@ -114,6 +122,13 @@ export default function AgentTerminal({ logs }: AgentTerminalProps) {
           ))
         )}
         <div ref={terminalEndRef} />
+        {/* Blinking cursor while stream is active */}
+        {isStreaming && (
+          <div className="flex items-center gap-2 pt-1 pb-2">
+            <span className="text-[10px] text-slate-600 select-none">—</span>
+            <span className="w-2 h-3.5 bg-blue-500/70 rounded-sm animate-pulse" />
+          </div>
+        )}
       </div>
     </div>
   );
