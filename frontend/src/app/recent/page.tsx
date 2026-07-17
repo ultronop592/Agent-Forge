@@ -105,14 +105,14 @@ export default function LaunchHistory() {
       {/* Analytics Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "Total Runs Orchestrated", val: totalRuns, icon: Activity, color: "text-blue-400 bg-blue-500/10 border-blue-500/10" },
-          { label: "Success Rate (Completed)", val: `${successRate}%`, icon: CheckCircle2, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/10" },
-          { label: "Active Deployments", val: runningRuns, icon: Loader2, color: "text-purple-400 bg-purple-500/10 border-purple-500/10", animate: runningRuns > 0 },
-          { label: "Failed Runs", val: failedRuns, icon: XCircle, color: "text-rose-400 bg-rose-500/10 border-rose-500/10" }
+          { label: "Total Runs Orchestrated", val: totalRuns, icon: Activity, color: "text-blue-450 bg-blue-500/5 border-blue-500/10 hover:border-blue-500/20" },
+          { label: "Success Rate (Completed)", val: `${successRate}%`, icon: CheckCircle2, color: "text-emerald-450 bg-emerald-500/5 border-emerald-500/10 hover:border-emerald-500/20" },
+          { label: "Active Deployments", val: runningRuns, icon: Loader2, color: "text-purple-450 bg-purple-500/5 border-purple-500/10 hover:border-purple-500/20", animate: runningRuns > 0 },
+          { label: "Failed Runs", val: failedRuns, icon: XCircle, color: "text-rose-405 bg-rose-500/5 border-rose-500/10 hover:border-rose-500/20" }
         ].map((item, idx) => {
           const Icon = item.icon;
           return (
-            <div key={idx} className={`glass-panel border ${item.color} p-5 rounded-xl flex items-center justify-between hover:scale-[1.01] transition-transform`}>
+            <div key={idx} className={`glass-panel border p-5 rounded-xl flex items-center justify-between hover:scale-[1.02] hover:-translate-y-0.5 transition-all duration-305 ${item.color}`}>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                   {item.label}
@@ -121,8 +121,8 @@ export default function LaunchHistory() {
                   {item.val}
                 </h4>
               </div>
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                <Icon className={`w-5 h-5 ${item.animate ? "animate-spin" : ""}`} />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-800 bg-slate-950/60 shadow-inner">
+                <Icon className={`w-5 h-5 text-blue-400 ${item.animate ? "animate-spin" : ""}`} />
               </div>
             </div>
           );

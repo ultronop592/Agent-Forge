@@ -10,42 +10,35 @@ def list_agents() -> List[Dict[str, Any]]:
             "name": "Planner",
             "role": "Lead Architect",
             "status": "idle",
-            "description": "Analyzes user request, splits it into structured subtasks, and schedules agent execution sequences.",
-            "tools": ["State Decomposer"]
+            "description": "Analyzes user requests, splits goals into structured subtask chains, and manages workflows.",
+            "tools": ["Plan Decomposer"]
         },
         {
-            "name": "Researcher",
-            "role": "Data Collector",
+            "name": "Analyst",
+            "role": "Research & SWOT Analyst",
             "status": "idle",
-            "description": "Searches the web via Tavily, crawls target URLs, and compiles raw references and citation reports.",
-            "tools": ["Web Search (Tavily)", "Document Fetcher"]
-        },
-        {
-            "name": "Reasoner",
-            "role": "Critical Analyst",
-            "status": "idle",
-            "description": "Performs logical analysis, evaluates conflicting statistics, identifies structural gaps, and lists entry constraints.",
-            "tools": ["SWOT Analyser", "Consistency Evaluator"]
+            "description": "Performs web queries via Tavily, analyzes tradeoffs, and performs SWOT synthesis in a single unified step.",
+            "tools": ["Web Search (Tavily)", "SWOT Compiler"]
         },
         {
             "name": "Executor",
-            "role": "Developer & Author",
+            "role": "Deliverables Builder",
             "status": "idle",
-            "description": "Aggregates findings and drafts the final code or report according to design blueprints.",
-            "tools": ["Code Compiler", "Markdown Report Writer"]
+            "description": "Aggregates prior agent context and drafts polished code, reports, or data files.",
+            "tools": ["Code Generator", "Report Writer"]
         },
         {
             "name": "Verifier",
-            "role": "QA & Fact-Checker",
+            "role": "QA Fact-Checker",
             "status": "idle",
-            "description": "Inspects executor deliverables against original guidelines, runs lint validation, and scores factual certainty.",
-            "tools": ["Hallucination Detector", "Confidence Scorer"]
+            "description": "Cross-checks executor deliverables against requirements, scoring confidence and triggering self-healing loopbacks.",
+            "tools": ["Hallucination Detector", "Verification Evaluator"]
         },
         {
             "name": "MemoryAgent",
-            "role": "Librarian",
+            "role": "Institutional Librarian",
             "status": "idle",
-            "description": "Manages recall of past task results and saves new insights to the long-term semantic memory storage.",
-            "tools": ["Semantic Query", "Memory Store"]
+            "description": "Manages recall of context before task runs and saves verified lessons via vector embeddings.",
+            "tools": ["Semantic Similarity", "Vector Storage"]
         }
     ]

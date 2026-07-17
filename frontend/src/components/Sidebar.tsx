@@ -95,9 +95,9 @@ export default function Sidebar() {
         <span>System Core API</span>
         <div className="flex items-center gap-2">
           <span
-            className={`w-2.5 h-2.5 rounded-full ${
+            className={`w-2 h-2 rounded-full ${
               apiStatus === "healthy"
-                ? "bg-emerald-500 animate-pulse"
+                ? "bg-emerald-500 pulse-emerald"
                 : apiStatus === "connecting"
                 ? "bg-amber-500 animate-pulse"
                 : "bg-rose-500"

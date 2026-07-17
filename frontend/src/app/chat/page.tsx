@@ -282,25 +282,27 @@ function WorkspaceInner() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden h-[calc(100vh-84px)]">
         
         {/* Left Side Column: Form input or active Tasks list (span 4) */}
-        <div className="lg:col-span-4 border-r border-slate-900 p-6 overflow-y-auto flex flex-col gap-6">
+        <div className="lg:col-span-4 border-r border-slate-900 p-6 overflow-y-auto flex flex-col gap-6 bg-slate-950/20">
           {!taskId ? (
-            <div className="glass-panel border border-slate-800 rounded-xl p-5 space-y-5">
+            <div className="glass-panel border border-slate-800 rounded-xl p-5 space-y-5 premium-glow-blue relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-blue-600/5 rounded-full blur-xl pointer-events-none" />
+              
               <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
-                <Sparkles className="w-4 h-4 text-blue-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                <Sparkles className="w-4 h-4 text-blue-450 animate-pulse" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
                   Deploy Workforce Flow
                 </h3>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
                     1. Select Target Plugin Workflow
                   </label>
                   <select 
                     value={selectedPlugin}
                     onChange={(e) => setSelectedPlugin(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-300 font-medium focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-300 font-medium focus:outline-none focus:border-blue-500/60 transition-all"
                   >
                     {plugins.map((p) => (
                       <option key={p.plugin_id} value={p.plugin_id}>
@@ -308,13 +310,13 @@ function WorkspaceInner() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-slate-600 leading-normal">
+                  <p className="text-[10px] text-slate-650 leading-normal font-medium">
                     {plugins.find(p => p.plugin_id === selectedPlugin)?.description}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
                     2. Describe Goal Objectives
                   </label>
                   <textarea 
@@ -322,14 +324,14 @@ function WorkspaceInner() {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Provide detailed goals for the workforce. E.g. 'Build a python script implementing a token bucketer' or 'Perform startup analysis on AI voice agents markets.'"
-                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500 leading-relaxed"
+                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500/60 transition-all leading-relaxed resize-none"
                   />
                 </div>
 
                 <button 
                   type="submit"
                   disabled={!prompt.trim() || isSubmitting}
-                  className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-bold text-white flex items-center justify-center gap-2 transition duration-300 glow-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-500 hover:to-indigo-550 text-xs font-bold text-white flex items-center justify-center gap-2 transition duration-300 glow-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -347,9 +349,10 @@ function WorkspaceInner() {
             </div>
           ) : (
             <div className="space-y-5 flex flex-col h-full overflow-hidden">
-              <div className="glass-panel border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="glass-panel border border-slate-805 rounded-xl p-4 space-y-2 premium-glow-purple relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-purple-650/5 rounded-full blur-xl pointer-events-none" />
                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Goal Objective:</span>
-                <p className="text-xs text-slate-300 leading-relaxed line-clamp-4">{prompt}</p>
+                <p className="text-xs text-slate-300 leading-relaxed line-clamp-4 font-medium">{prompt}</p>
                 
                 {/* Confidence bar if verified */}
                 {confidenceScore !== null && (
@@ -368,7 +371,7 @@ function WorkspaceInner() {
         </div>
 
         {/* Right Side Column: Tab Viewports (span 8) */}
-        <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5">
+        <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5 bg-slate-950/10">
           {/* Tabs header selector */}
           <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
             {[
@@ -385,15 +388,15 @@ function WorkspaceInner() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   disabled={tab.disabled}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide border transition cursor-pointer ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wide border transition-all duration-300 cursor-pointer ${
                     isActive 
-                      ? "bg-blue-600/10 border-blue-500/40 text-blue-400 glow-primary/5" 
+                      ? "bg-blue-600/10 border-blue-500/40 text-blue-450 glow-primary/5 scale-[1.03]" 
                       : tab.disabled 
-                      ? "border-transparent text-slate-700 cursor-not-allowed" 
-                      : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+                      ? "border-transparent text-slate-805 cursor-not-allowed opacity-40" 
+                      : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 hover:scale-[1.01]"
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-blue-400 animate-pulse" : ""}`} />
                   <span>{tab.label}</span>
                 </button>
               );

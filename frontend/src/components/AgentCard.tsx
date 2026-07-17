@@ -19,6 +19,7 @@ interface AgentCardProps {
 
 const AGENT_ICONS: Record<string, any> = {
   "Planner": Compass,
+  "Analyst": Search,
   "Researcher": Search,
   "Reasoner": BrainCircuit,
   "Executor": FileCode,

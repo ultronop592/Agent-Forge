@@ -137,46 +137,46 @@ export default function Dashboard() {
         {/* Welcome Text Left Panel */}
         <div className="lg:col-span-7 flex flex-col justify-between py-2">
           <div>
-            <div className="flex items-center gap-2 text-blue-500 font-semibold text-xs uppercase tracking-widest mb-2.5">
-              <Sparkles className="w-4 h-4 animate-pulse" />
+            <div className="flex items-center gap-2 text-blue-450 font-semibold text-xs uppercase tracking-widest mb-2.5">
+              <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
               <span>Autonomous Workforce Engine</span>
             </div>
             <h2 className="text-4xl font-extrabold tracking-tight text-white leading-tight">
-              AgentForge Control Center
+              <span className="text-gradient-blue">AgentForge</span> Control Center
             </h2>
-            <p className="text-slate-400 text-sm mt-3.5 max-w-xl leading-relaxed">
+            <p className="text-slate-400 text-sm mt-3.5 max-w-xl leading-relaxed font-medium">
               Welcome to the central workforce coordinator. Orchestrate collaborative teams of AI agents that structure, debug, research, and execute complex workflows in parallel.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
             <Link 
               href="/chat"
-              className="flex items-center justify-between p-4 rounded-xl border border-slate-900 bg-slate-950/40 hover:bg-slate-900/20 hover:border-slate-800 transition group"
+              className="flex items-center justify-between p-5 rounded-xl border border-slate-900 bg-slate-950/40 hover:bg-slate-900/20 hover:border-slate-800/80 transition-all duration-300 group glass-card-hover"
             >
               <div className="space-y-1">
-                <span className="text-xs font-semibold text-slate-200">Interactive Workspace</span>
-                <p className="text-[10px] text-slate-500 leading-normal">Inspect running agents & verify output</p>
+                <span className="text-xs font-bold text-slate-100 group-hover:text-blue-450 transition-colors">Interactive Workspace</span>
+                <p className="text-[10px] text-slate-500 leading-normal font-medium">Inspect running agents & verify output</p>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
+              <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
             </Link>
 
             <Link 
               href="/recent"
-              className="flex items-center justify-between p-4 rounded-xl border border-slate-900 bg-slate-950/40 hover:bg-slate-900/20 hover:border-slate-800 transition group"
+              className="flex items-center justify-between p-5 rounded-xl border border-slate-900 bg-slate-950/40 hover:bg-slate-900/20 hover:border-slate-800/80 transition-all duration-300 group glass-card-hover"
             >
               <div className="space-y-1">
-                <span className="text-xs font-semibold text-slate-200">Launch History Logs</span>
-                <p className="text-[10px] text-slate-500 leading-normal">Full audit trails of past workflow runs</p>
+                <span className="text-xs font-bold text-slate-100 group-hover:text-blue-450 transition-colors">Launch History Logs</span>
+                <p className="text-[10px] text-slate-500 leading-normal font-medium">Full audit trails of past workflow runs</p>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
+              <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
             </Link>
           </div>
         </div>
 
         {/* Quick Launch Console Right Panel */}
         <div className="lg:col-span-5">
-          <div className="glass-panel border border-slate-850 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between h-full">
+          <div className="glass-panel border border-slate-850 rounded-2xl p-5 shadow-2xl relative overflow-hidden flex flex-col justify-between h-full shimmer-sweep premium-glow-blue">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
             
             <div className="flex items-center gap-2 border-b border-slate-900 pb-3 mb-4">
@@ -249,14 +249,14 @@ export default function Dashboard() {
       {/* Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "Total Tasks Spanned", val: stats.totalTasks, icon: Layers, color: "text-blue-400 bg-blue-500/5 border-blue-500/10" },
-          { label: "Active Integrations", val: stats.activeTools, icon: Cpu, color: "text-purple-400 bg-purple-500/5 border-purple-500/10" },
-          { label: "Memory Bank Units", val: stats.memories, icon: BrainCircuit, color: "text-emerald-400 bg-emerald-500/5 border-emerald-500/10" },
-          { label: "Quality Confidence", val: stats.avgConfidence, icon: Activity, color: "text-pink-400 bg-pink-500/5 border-pink-500/10" }
+          { label: "Total Tasks Spanned", val: stats.totalTasks, icon: Layers, color: "text-blue-405 bg-blue-500/5 border-blue-500/10 hover:border-blue-500/20" },
+          { label: "Active Integrations", val: stats.activeTools, icon: Cpu, color: "text-purple-405 bg-purple-500/5 border-purple-500/10 hover:border-purple-500/20" },
+          { label: "Memory Bank Units", val: stats.memories, icon: BrainCircuit, color: "text-emerald-405 bg-emerald-500/5 border-emerald-500/10 hover:border-emerald-500/20" },
+          { label: "Quality Confidence", val: stats.avgConfidence, icon: Activity, color: "text-pink-405 bg-pink-500/5 border-pink-500/10 hover:border-pink-500/20" }
         ].map((item, idx) => {
           const Icon = item.icon;
           return (
-            <div key={idx} className="glass-panel border border-slate-800/80 p-5 rounded-xl flex items-center justify-between hover:scale-[1.01] transition-transform">
+            <div key={idx} className={`glass-panel border border-slate-800/80 p-5 rounded-xl flex items-center justify-between hover:scale-[1.02] hover:-translate-y-0.5 transition-all duration-300 ${item.color}`}>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                   {item.label}
@@ -265,8 +265,8 @@ export default function Dashboard() {
                   {item.val}
                 </h4>
               </div>
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${item.color}`}>
-                <Icon className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-800 bg-slate-950/60 shadow-inner">
+                <Icon className="w-5 h-5 text-blue-400" />
               </div>
             </div>
           );
@@ -279,8 +279,11 @@ export default function Dashboard() {
         {/* Left Side: Active Workforce (span 8) */}
         <div className="lg:col-span-8 space-y-4">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Active Collaborative Workforce</h3>
-            <p className="text-slate-500 text-xs mt-0.5">Specialized agent modules running within the LangGraph state orchestration framework.</p>
+            <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-blue-450" />
+              <span>Active Collaborative Workforce</span>
+            </h3>
+            <p className="text-slate-500 text-xs mt-0.5 font-medium">Specialized agent modules running within the LangGraph state orchestration framework.</p>
           </div>
 
           {loading ? (
@@ -310,18 +313,18 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-white tracking-tight">Recent Activity</h3>
-              <p className="text-slate-500 text-xs mt-0.5">Quick lookup of latest runs.</p>
+              <p className="text-slate-500 text-xs mt-0.5 font-medium">Quick lookup of latest runs.</p>
             </div>
             <Link 
               href="/recent" 
-              className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1"
+              className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 transition-all"
             >
               <span>View All</span>
               <History className="w-3 h-3" />
             </Link>
           </div>
 
-          <div className="glass-panel border border-slate-850 rounded-xl p-4 flex-1 flex flex-col justify-between space-y-4">
+          <div className="glass-panel border border-slate-850 rounded-xl p-4 flex-1 flex flex-col justify-between space-y-4 premium-glow-purple">
             {loading ? (
               <div className="flex-1 flex items-center justify-center py-10">
                 <div className="w-5 h-5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
