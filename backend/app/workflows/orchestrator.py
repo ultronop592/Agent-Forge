@@ -8,6 +8,7 @@ from backend.app.agents.analyst_agent import AnalystAgent
 from backend.app.agents.executor import ExecutorAgent
 from backend.app.agents.verifier import VerifierAgent
 from backend.app.agents.memory_agent import MemoryAgent
+from backend.app.agents.manager_agent import ManagerAgent
 
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
@@ -44,6 +45,7 @@ analyst_agent   = AnalystAgent()
 executor_agent  = ExecutorAgent()
 verifier_agent  = VerifierAgent()
 memory_agent    = MemoryAgent()
+manager_agent   = ManagerAgent()
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +92,9 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
 
     update_task_in_db(task_id, "running")
 
+    manager_agent.log_db(task_id, None, "manager_decision",
+        "🧭 [Manager] Workforce activated. Delegating to **Planner** to decompose the goal into subtasks.")
+
     plan = await planner_agent.create_plan(prompt, task_id)
 
     db = SessionLocal()
@@ -113,10 +118,19 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     finally:
         db.close()
 
+    # Manager announces the full execution plan
+    manager_agent.log_plan_received(
+        task_id=task_id,
+        subtask_count=len(subtask_dicts),
+        subtask_titles=[s["title"] for s in subtask_dicts],
+    )
+    manager_agent.log_transition(task_id, "Planner", "Router", reason="plan accepted, dispatching subtasks")
+
     return {
         "subtasks": subtask_dicts,
         "current_subtask_index": 0,
         "agent_outputs": {},
+        "agent_sequence": ["Planner"],
         "logs": []
     }
 
@@ -127,6 +141,7 @@ async def memory_node(state: AgentState) -> Dict[str, Any]:
     subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
 
+    manager_agent.announce_start(task_id, "Memory", subtask["title"], subtask_id)
     update_subtask_in_db(subtask_id, "running")
 
     # Call memory agent — it returns (output, prompt_embedding)
@@ -138,23 +153,27 @@ async def memory_node(state: AgentState) -> Dict[str, Any]:
     )
 
     update_subtask_in_db(subtask_id, "completed", output=output)
+    manager_agent.announce_complete(task_id, "Memory", subtask["title"], subtask_id)
 
     outputs = state["agent_outputs"].copy()
     outputs[subtask_id] = output
+    seq = state.get("agent_sequence", []) + ["Memory"]
 
     return {
         "agent_outputs": outputs,
         "current_subtask_index": idx + 1,
-        "prompt_embedding": query_vector  # Caches computed query embedding
+        "prompt_embedding": query_vector,
+        "agent_sequence": seq,
     }
 
 
 async def analyst_node(state: AgentState) -> Dict[str, Any]:
-    task_id  = state["task_id"]
-    idx      = state["current_subtask_index"]
-    subtask  = state["subtasks"][idx]
+    task_id    = state["task_id"]
+    idx        = state["current_subtask_index"]
+    subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
 
+    manager_agent.announce_start(task_id, "Analyst", subtask["title"], subtask_id)
     update_subtask_in_db(subtask_id, "running")
 
     # Single-step Search + Reasoning
@@ -166,13 +185,16 @@ async def analyst_node(state: AgentState) -> Dict[str, Any]:
     )
 
     update_subtask_in_db(subtask_id, "completed", output=output)
+    manager_agent.announce_complete(task_id, "Analyst", subtask["title"], subtask_id)
 
     outputs = state["agent_outputs"].copy()
     outputs[subtask_id] = output
+    seq = state.get("agent_sequence", []) + ["Analyst"]
 
     return {
         "agent_outputs": outputs,
-        "current_subtask_index": idx + 1
+        "current_subtask_index": idx + 1,
+        "agent_sequence": seq,
     }
 
 
@@ -188,6 +210,7 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
 
     subtask_id = subtask["id"]
 
+    manager_agent.announce_start(task_id, "Executor", subtask["title"], subtask_id)
     update_subtask_in_db(subtask_id, "running")
 
     # Gather prior context
@@ -199,6 +222,10 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     context = _truncate_context(context_full, _EXECUTOR_CONTEXT_CHAR_LIMIT, "Executor")
 
     feedback = state.get("verifier_feedback", "")
+    if feedback:
+        manager_agent.log_db(task_id, subtask_id, "manager_decision",
+            f"📌 [Manager] Passing Verifier correction hint to Executor:\n   └─ {feedback}")
+
     output = await executor_agent.run_subtask(
         subtask_title=subtask["title"],
         subtask_desc=subtask["description"],
@@ -209,15 +236,18 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     )
 
     update_subtask_in_db(subtask_id, "completed", output=output)
+    manager_agent.announce_complete(task_id, "Executor", subtask["title"], subtask_id)
 
     outputs = state["agent_outputs"].copy()
     outputs[subtask_id] = output
+    seq = state.get("agent_sequence", []) + ["Executor"]
 
     new_idx = idx if idx >= len(state["subtasks"]) else idx + 1
 
     return {
         "agent_outputs": outputs,
-        "current_subtask_index": new_idx
+        "current_subtask_index": new_idx,
+        "agent_sequence": seq,
     }
 
 
@@ -225,6 +255,9 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
     task_id     = state["task_id"]
     prompt      = state["prompt"]
     retry_count = state.get("retry_count", 0)
+
+    manager_agent.announce_start(task_id, "Verifier", "Final QA & Fact-Check")
+    manager_agent.log_transition(task_id, "Executor", "Verifier", reason="all subtasks complete, running final QA")
 
     executor_outputs = []
     for sub in state["subtasks"]:
@@ -240,7 +273,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 
     verifier_agent.log_db(task_id, None, "thinking",
                           f"Starting final verification and quality check (Attempt {retry_count + 1})...")
-    
+
     result = await verifier_agent.verify_output(
         original_goal=prompt,
         generated_output=exec_content,
@@ -248,16 +281,14 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         subtask_id=None
     )
 
-    # ── Self-healing retry loop (Verifier & QA) ──────────────────────────
+    # ── Self-healing retry loop ───────────────────────────────────────────
     if not result.is_valid and retry_count < 3:
-        msg = (
-            f"🛡️ [QA/Verifier] Verification failed (score: {result.confidence_score:.2f}). "
-            f"Feedback: {result.feedback}\n"
-            f"Routing back to Executor (Attempt {retry_count + 1}/3)..."
+        manager_agent.log_verifier_retry(
+            task_id=task_id,
+            attempt=retry_count + 1,
+            max_retries=3,
+            feedback=result.feedback,
         )
-        verifier_agent.log_db(task_id, None, "thinking", msg)
-        verifier_agent.log_db(task_id, None, "manager_decision", f"❌ QA GATE FAILED — Routing back to Executor for self-healing: {result.feedback}")
-        logger.warning(msg)
 
         for sub in state["subtasks"]:
             if sub["assigned_agent"] == "verifier":
@@ -283,7 +314,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             f"Key observations: {result.feedback}"
         ),
         category="factual",
-        embedding=prompt_emb  # Bypasses LLM call to save token budget & latency
+        embedding=prompt_emb,
     )
 
     status = "completed" if result.is_valid else "failed"
@@ -295,18 +326,15 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                                  output=result.verified_output,
                                  confidence_score=result.confidence_score)
 
-    # ── Write run summary for frontend terminal ─────────────────────────
-    summary_markdown = (
-        f"# 📋 Agentic Workforce Run Summary\n\n"
-        f"**Final Status:** `{status.upper()}`  \n"
-        f"**QA Verification Certainty:** `{result.confidence_score:.0%}`  \n"
-        f"**Self-Healing Retries executed:** `{retry_count}`  \n\n"
-        f"**Latency Optimization Metrics:**\n"
-        f"- Target API Calls: **5**\n"
-        f"- Memory Embedding: **Cached & Reused** (0 extra embedding calls during storage)\n"
-        f"- Analyst Node: **Search & Reasoning combined** (saved 1 reasoning text call)\n"
+    # ── Manager writes the final run summary ────────────────────────────
+    seq = state.get("agent_sequence", []) + ["Verifier"]
+    manager_agent.write_run_summary(
+        task_id=task_id,
+        verifier_retry_count=retry_count,
+        final_confidence=result.confidence_score,
+        status=status,
+        agent_sequence=seq,
     )
-    verifier_agent.log_db(task_id, None, "manager_decision", summary_markdown)
 
     return {
         "verification_results": {
@@ -316,6 +344,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         },
         "verifier_feedback": "",
         "final_result":      result.verified_output,
+        "agent_sequence":    seq,
     }
 
 

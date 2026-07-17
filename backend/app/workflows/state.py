@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     retry_count: int           # Verifier → Executor self-healing retries
     verifier_feedback: str
     prompt_embedding: List[float]  # Cached embedding of the prompt
+    agent_sequence: List[str]      # Manager tracks execution order for run summary
     # ── Manager/QA Agent tracking ────────────────────────────────────────
     manager_quality_scores: Dict[str, float]   # subtask_id → quality score from QA Agent
     manager_skip_flags: Dict[str, bool]        # subtask_id → True if skipped after max retries

@@ -30,6 +30,7 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
             "retry_count": 0,
             "verifier_feedback": "",
             "prompt_embedding": [],
+            "agent_sequence": [],           # Manager populates this as agents run
             # ── Manager Agent tracking ────────────────────────────────
             "manager_quality_scores": {},
             "manager_skip_flags": {},
