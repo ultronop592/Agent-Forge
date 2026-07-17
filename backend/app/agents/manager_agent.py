@@ -70,6 +70,34 @@ class ManagerAgent(BaseAgent):
         self.log_db(task_id, subtask_id, "manager_decision", msg)
         logger.info(msg)
 
+    def announce_parallel_dispatch(
+        self,
+        task_id: str,
+        agent_names: list[str],
+    ) -> None:
+        """Log that multiple agents are being dispatched in parallel."""
+        agents_str = " & ".join(f"**{name}**" for name in agent_names)
+        msg = (
+            f"⚡ [Manager] Parallel Stage Activated: Launching {agents_str} concurrently\n"
+            f"   └─ Subtasks executing in parallel with asyncio.gather()"
+        )
+        self.log_db(task_id, None, "manager_decision", msg)
+        logger.info(msg)
+
+    def announce_parallel_complete(
+        self,
+        task_id: str,
+        agent_names: list[str],
+    ) -> None:
+        """Log that all parallel agents finished execution."""
+        agents_str = " & ".join(f"**{name}**" for name in agent_names)
+        msg = (
+            f"✅ [Manager] Parallel Stage Complete: {agents_str} finished\n"
+            f"   └─ Aggregating intelligence outputs for Executor"
+        )
+        self.log_db(task_id, None, "manager_decision", msg)
+        logger.info(msg)
+
     def log_transition(
         self,
         task_id: str,

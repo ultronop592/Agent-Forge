@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Dict, Any, List, Literal
 from langgraph.graph import StateGraph, END
@@ -132,6 +133,78 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         "agent_outputs": {},
         "agent_sequence": ["Planner"],
         "logs": []
+    }
+
+
+async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
+    task_id = state["task_id"]
+    subtasks = state["subtasks"]
+    idx = state["current_subtask_index"]
+
+    # Identify consecutive non-dependent research subtasks (memory_agent & analyst)
+    pending_subtasks = []
+    for s_idx in range(idx, len(subtasks)):
+        if subtasks[s_idx]["assigned_agent"] in ["memory_agent", "analyst"]:
+            pending_subtasks.append((s_idx, subtasks[s_idx]))
+        else:
+            break
+
+    if not pending_subtasks:
+        return {"current_subtask_index": idx}
+
+    agent_names = [sub["assigned_agent"].capitalize() for _, sub in pending_subtasks]
+    manager_agent.announce_parallel_dispatch(task_id, agent_names)
+
+    # Helper coroutine for executing a single subtask asynchronously
+    async def _run_single_subtask(s_idx: int, sub: Dict[str, Any]):
+        sub_id = sub["id"]
+        update_subtask_in_db(sub_id, "running")
+        agent_type = sub["assigned_agent"]
+
+        if agent_type == "memory_agent":
+            output, query_vector = await memory_agent.run_subtask(
+                subtask_title=sub["title"],
+                subtask_desc=sub["description"],
+                task_id=task_id,
+                subtask_id=sub_id
+            )
+            update_subtask_in_db(sub_id, "completed", output=output)
+            return sub_id, output, query_vector, "Memory"
+        elif agent_type == "analyst":
+            output = await analyst_agent.run_subtask(
+                subtask_title=sub["title"],
+                subtask_desc=sub["description"],
+                task_id=task_id,
+                subtask_id=sub_id
+            )
+            update_subtask_in_db(sub_id, "completed", output=output)
+            return sub_id, output, None, "Analyst"
+        else:
+            return sub_id, "", None, agent_type
+
+    # Execute all independent research subtasks concurrently using asyncio.gather!
+    tasks_to_run = [_run_single_subtask(s_idx, sub) for s_idx, sub in pending_subtasks]
+    results = await asyncio.gather(*tasks_to_run)
+
+    outputs = state["agent_outputs"].copy()
+    prompt_emb = state.get("prompt_embedding", [])
+    new_seq = state.get("agent_sequence", []).copy()
+
+    for sub_id, output, embedding, agent_name in results:
+        outputs[sub_id] = output
+        if embedding:
+            prompt_emb = embedding
+        new_seq.append(agent_name)
+
+    manager_agent.announce_parallel_complete(task_id, agent_names)
+
+    new_idx = idx + len(pending_subtasks)
+
+    return {
+        "agent_outputs": outputs,
+        "current_subtask_index": new_idx,
+        "prompt_embedding": prompt_emb,
+        "agent_sequence": new_seq
     }
 
 
@@ -352,13 +425,25 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 # Routing
 # ---------------------------------------------------------------------------
 def route_subtasks(state: AgentState) -> Literal[
-    "analyst", "executor", "memory_agent", "verifier", "__end__"
+    "parallel_research", "analyst", "executor", "memory_agent", "verifier", "__end__"
 ]:
     idx      = state["current_subtask_index"]
     subtasks = state["subtasks"]
 
     if idx >= len(subtasks):
         return "verifier"
+
+    # Count consecutive research subtasks (memory_agent / analyst) remaining from idx
+    research_count = 0
+    for i in range(idx, len(subtasks)):
+        if subtasks[i]["assigned_agent"] in ["memory_agent", "analyst"]:
+            research_count += 1
+        else:
+            break
+
+    # If 2 or more research subtasks are queued, run them in parallel!
+    if research_count >= 2:
+        return "parallel_research"
 
     agent = subtasks[idx]["assigned_agent"]
     if agent == "analyst":
@@ -385,11 +470,12 @@ def route_verifier_output(state: AgentState) -> Literal["executor", "__end__"]:
 # ---------------------------------------------------------------------------
 builder = StateGraph(AgentState)
 
-builder.add_node("planner",      planner_node)
-builder.add_node("memory_agent",  memory_node)
-builder.add_node("analyst",      analyst_node)
-builder.add_node("executor",     executor_node)
-builder.add_node("verifier",     verifier_node)
+builder.add_node("planner",           planner_node)
+builder.add_node("parallel_research", parallel_research_node)
+builder.add_node("memory_agent",       memory_node)
+builder.add_node("analyst",           analyst_node)
+builder.add_node("executor",          executor_node)
+builder.add_node("verifier",          verifier_node)
 
 builder.set_entry_point("planner")
 
@@ -398,23 +484,25 @@ builder.add_conditional_edges(
     "planner",
     route_subtasks,
     {
-        "memory_agent": "memory_agent",
-        "analyst":      "analyst",
-        "executor":     "executor",
-        "verifier":     "verifier",
+        "parallel_research": "parallel_research",
+        "memory_agent":      "memory_agent",
+        "analyst":           "analyst",
+        "executor":          "executor",
+        "verifier":          "verifier",
     }
 )
 
 # Conditional edges after nodes
-for node in ["memory_agent", "analyst", "executor"]:
+for node in ["parallel_research", "memory_agent", "analyst", "executor"]:
     builder.add_conditional_edges(
         node,
         route_subtasks,
         {
-            "memory_agent": "memory_agent",
-            "analyst":      "analyst",
-            "executor":     "executor",
-            "verifier":     "verifier",
+            "parallel_research": "parallel_research",
+            "memory_agent":      "memory_agent",
+            "analyst":           "analyst",
+            "executor":          "executor",
+            "verifier":          "verifier",
         }
     )
 
