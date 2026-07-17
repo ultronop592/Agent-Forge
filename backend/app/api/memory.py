@@ -5,8 +5,11 @@ from pydantic import BaseModel
 
 from backend.app.database.connection import get_db
 from backend.app.database.models import Memory
+from backend.app.agents.memory_agent import MemoryAgent
 
 router = APIRouter(prefix="/memory", tags=["memory"])
+
+memory_agent = MemoryAgent()
 
 class MemoryCreate(BaseModel):
     category: str = "factual"
@@ -18,38 +21,27 @@ def query_memory(
     category: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
+    # If query is provided, perform Cosine Similarity Vector Search!
+    if query and query.strip():
+        recalled_memories, _ = memory_agent.retrieve_memories(
+            query=query.strip(),
+            category=category if category else None,
+            top_k=20,
+            min_score=0.20
+        )
+        return recalled_memories
+
+    # Otherwise, return all memories sorted by newest first
     q = db.query(Memory)
-    if category:
+    if category and category.strip() and category.lower() != "all":
         q = q.filter(Memory.category == category)
     
     memories = q.order_by(Memory.created_at.desc()).all()
-    
-    if not query:
-        return [m.to_dict() for m in memories]
-        
-    # Standard keyword match logic
-    words = query.lower().split()
-    results = []
-    for m in memories:
-        score = 0
-        content_lower = m.content.lower()
-        for w in words:
-            if w in content_lower:
-                score += 1
-        if score > 0:
-            results.append((score, m.to_dict()))
-            
-    results.sort(key=lambda x: x[0], reverse=True)
-    return [r[1] for r in results]
+    return [m.to_dict() for m in memories]
 
 @router.post("")
 def add_memory(payload: MemoryCreate, db: Session = Depends(get_db)):
-    mem = Memory(
-        category=payload.category,
+    return memory_agent.store_memory(
         content=payload.content,
-        embedding_searchable_text=payload.content[:200]
+        category=payload.category
     )
-    db.add(mem)
-    db.commit()
-    db.refresh(mem)
-    return mem.to_dict()

@@ -378,15 +378,27 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             "retry_count":       retry_count + 1,
         }
 
-    # ── Task complete: Store memory reusing cached embedding ─────────────
+    # ── Task complete: Store rich memory with cached embedding ───────────
     prompt_emb = state.get("prompt_embedding", None)
+
+    # Determine topic category dynamically
+    prompt_lower = prompt.lower()
+    if any(w in prompt_lower for w in ["code", "function", "script", "debug", "implement", "python", "javascript"]):
+        mem_category = "code"
+    elif any(w in prompt_lower for w in ["research", "analysis", "swot", "market", "pricing", "competitor"]):
+        mem_category = "insight"
+    else:
+        mem_category = "factual"
+
+    rich_content = (
+        f"Goal: '{prompt}'.\n"
+        f"Verified Solution & Feedback (Confidence {result.confidence_score:.0%}): {result.feedback}\n"
+        f"Key Excerpt: {exec_content[:350].strip()}"
+    )
+
     memory_agent.store_memory(
-        content=(
-            f"Learned from goal '{prompt[:80]}...': "
-            f"Verification Confidence Score: {result.confidence_score:.2f}. "
-            f"Key observations: {result.feedback}"
-        ),
-        category="factual",
+        content=rich_content,
+        category=mem_category,
         embedding=prompt_emb,
     )
 

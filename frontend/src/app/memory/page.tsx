@@ -9,6 +9,8 @@ interface Memory {
   category: string;
   content: string;
   created_at: string;
+  match_percentage?: string;
+  similarity_score?: number;
 }
 
 export default function MemoryBank() {
@@ -63,7 +65,7 @@ export default function MemoryBank() {
             <span>Semantic Memory Bank</span>
           </h2>
           <p className="text-slate-400 text-xs mt-1">
-            Browse and query factual constraints, lessons, and strategic outcomes collected during previous runs.
+            Browse and query factual constraints, code patterns, and strategic outcomes collected during previous runs via Cosine Similarity Vector Search.
           </p>
         </div>
         
@@ -86,9 +88,9 @@ export default function MemoryBank() {
               onChange={(e) => setNewCategory(e.target.value)}
               className="bg-slate-950 border border-slate-800/80 rounded px-2.5 py-1 text-xs text-slate-400 focus:outline-none"
             >
-              <option value="factual">Factual learning</option>
-              <option value="semantic">Semantic context</option>
-              <option value="execution_log">Rules guideline</option>
+              <option value="factual">Factual Record</option>
+              <option value="insight">Strategic Insight</option>
+              <option value="code">Code Pattern</option>
             </select>
           </div>
           <textarea 
@@ -127,18 +129,18 @@ export default function MemoryBank() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search semantically inside recorded memories (e.g. 'TAM figures' or 'coding bugs')..."
+            placeholder="Search semantically inside recorded memories (e.g. 'rate limiter token bucket' or 'SWOT analysis')..."
             className="w-full bg-slate-950 border border-slate-850/80 rounded-lg pl-10 pr-4 py-3 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
           />
         </div>
         
         {/* Category selection */}
-        <div className="flex items-center gap-1.5 self-start md:self-auto select-none">
+        <div className="flex items-center gap-1.5 self-start md:self-auto select-none flex-wrap">
           {[
             { label: "All Categories", val: "" },
-            { label: "Factual Records", val: "factual" },
-            { label: "Semantics Context", val: "semantic" },
-            { label: "Directives Guidelines", val: "execution_log" }
+            { label: "Factual", val: "factual" },
+            { label: "Insights", val: "insight" },
+            { label: "Code Patterns", val: "code" }
           ].map((cat) => {
             const isSelected = selectedCategory === cat.val;
             return (
@@ -157,7 +159,7 @@ export default function MemoryBank() {
           })}
         </div>
       </div>
- 
+
       {/* Memories Grid list */}
       <div className="space-y-4">
         {memories.length === 0 ? (
@@ -169,11 +171,20 @@ export default function MemoryBank() {
             {memories.map((mem) => (
               <div 
                 key={mem.id}
-                className="glass-panel border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition duration-300 space-y-4"
+                className="glass-panel border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition duration-300 space-y-4 relative"
               >
-                <p className="text-xs text-slate-300 leading-relaxed font-normal select-text">
-                  "{mem.content}"
-                </p>
+                <div className="space-y-2">
+                  {mem.match_percentage && (
+                    <div className="flex justify-end">
+                      <span className="px-2 py-0.5 rounded-full bg-blue-950/80 border border-blue-700/40 text-[10px] font-bold text-blue-400">
+                        🎯 {mem.match_percentage} Vector Match
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-300 leading-relaxed font-normal select-text whitespace-pre-wrap">
+                    {mem.content}
+                  </p>
+                </div>
                 
                 <div className="flex items-center justify-between border-t border-slate-900 pt-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
                   <div className="flex items-center gap-1.5">
