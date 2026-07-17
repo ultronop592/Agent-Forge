@@ -8,7 +8,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
 [![Render](https://img.shields.io/badge/Deployed_on-Render-46E3B7?style=flat-square&logo=render&logoColor=white)](https://render.com)
 
-> *"A self-healing, high-speed AI workforce that plans, researches, executes, verifies, and coordinates complex real-world tasks in parallel with zero-overhead supervision."*
+> *"A self-healing, high-speed AI workforce that plans, researches, executes, verifies, and coordinates complex real-world tasks in parallel with zero-overhead supervision, extensibility via MCP servers, and specialized workflow plugins."*
 
 ---
 
@@ -29,7 +29,9 @@ Instead of relying on a single slow, error-prone prompt attempt, AgentForge brea
 | 👑 **0-Cost Manager Coordinator** | ✅ Shipped | The Manager Agent operates as a zero-LLM-cost supervisor, logging pipeline transitions, parallel dispatches, and markdown run summaries. |
 | 🛰️ **Production SSE Streaming** | ✅ Shipped | Real-time Server-Sent Events with `X-Accel-Buffering: no` proxy headers, 15s `: ping` heartbeats, and exponential backoff auto-reconnect. |
 | 🔁 **Self-Healing Verification** | ✅ Shipped | Automatic QA feedback loops rerouting back to the Executor for correction when confidence falls below threshold (up to 3 retries). |
-| 🧠 **Cached Vector Memory** | ✅ Shipped | Semantic embeddings generated via `gemini-embedding-001` with pure-Python cosine similarity search and zero-cost memory storage caching. |
+| 🧠 **Cross-Task Vector Memory** | ✅ Shipped | Cosine similarity vector search over 3072-dimensional `gemini-embedding-001` embeddings with automatic task archiving and `🎯 XX% Match` UI badges. |
+| 🔌 **Model Context Protocol (MCP)** | ✅ Shipped | Connect and manage external `stdio` tool servers, inspect JSON-RPC schemas, and invoke tools directly from the workspace. |
+| 🧩 **Workflow Plugin Engine** | ✅ Shipped | Modular workflow presets (e.g., *Startup Market Research*, *Software Debugging Suite*) with custom persona overrides and default task chains. |
 | 🐘 **Neon PostgreSQL Integration** | ✅ Shipped | Production connection pooling with `pool_pre_ping=True` and serverless PostgreSQL support on Render. |
 
 ---
@@ -47,11 +49,59 @@ Instead of relying on a single slow, error-prone prompt attempt, AgentForge brea
 
 ---
 
+## 🔌 Model Context Protocol (MCP) Integration
+
+AgentForge natively implements Anthropic's **Model Context Protocol (MCP)** standard. This allows the workforce to securely connect to external tool servers (filesystem, databases, web scraping, API runners) using JSON-RPC over stdio/HTTP.
+
+### Key Capabilities:
+- **Server Registry:** Add, remove, and monitor external MCP servers via the `/mcp` management dashboard or REST API (`/api/mcp/servers`).
+- **Dynamic Tool Discovery:** Discovers available tools and parameters from registered MCP servers automatically.
+- **Interactive Tool Execution:** Test tool calls directly from the UI with custom JSON payloads.
+
+```
++-------------------+       JSON-RPC over stdio      +-------------------------+
+| AgentForge Engine | <===========================> | MCP Server (Python/Node)|
++-------------------+                               +-------------------------+
+        |                                                        |
+        v                                                        v
+ [Task Execution]                                        [Filesystem / Database]
+```
+
+---
+
+## 🧩 Workflow Plugins System
+
+AgentForge supports domain-specific **Workflow Plugins** that alter agent system instructions, inject specialized prompts, and configure default subtask sequences.
+
+### Built-in Plugins:
+
+1. **📈 Startup Market Research Plugin**
+   - **Persona Overrides:** Transforms Planner into a *VC Principal*, Analyst into a *Business Intelligence Analyst*, Reasoner into a *Strategy Advisor*, and Executor into a *Pitch Deck Writer*.
+   - **Deliverables:** Competitor matrix, TAM/SAM/SOM market sizing tables, SWOT analysis, and risk registers.
+
+2. **🐛 Software Debugging Suite Plugin**
+   - **Persona Overrides:** Transforms Planner into a *Principal Systems Architect*, Analyst into a *Root-Cause Analyst*, and Executor into a *Senior Software Engineer*.
+   - **Deliverables:** Bug diagnostics, root cause explanation, SOLID-compliant code fix, edge-case unit tests, and usage documentation.
+
+```python
+# Plugins inherit from BaseWorkflowPlugin
+class StartupResearchPlugin(BaseWorkflowPlugin):
+    @property
+    def plugin_id(self) -> str:
+        return "startup_research"
+
+    def get_custom_system_instruction(self, agent_name: str) -> str:
+        if agent_name == "Planner":
+            return "You are a Venture Capital Principal Planner..."
+```
+
+---
+
 ## 🔄 Workforce Graph Architecture
 
 ```mermaid
 graph TD
-    User([🧑 User Goal]) --> Planner[🧭 Planner Agent]
+    User([🧑 User Goal + Plugin Selection]) --> Planner[🧭 Planner Agent]
     Planner --> Manager[👑 Manager Supervisor]
 
     subgraph LangGraph State Machine
@@ -68,7 +118,7 @@ graph TD
         Join --> Executor[📝 Executor Agent]
         Executor --> Verifier[🛡️ Verifier Agent]
 
-        Verifier -->|is_valid = true OR retries exhausted| Done[✅ Task Complete & Saved]
+        Verifier -->|is_valid = true OR retries exhausted| Done[✅ Task Complete & Saved to Memory]
         Verifier -->|is_valid = false AND retry_count < 3| Executor
     end
 
@@ -96,6 +146,7 @@ Executor deliverables exceeding 6,000 characters are safely truncated for the Ve
 ## 🛠️ Tech Stack
 
 - **Backend Framework:** FastAPI + LangGraph + SQLAlchemy
+- **Protocol Standards:** Model Context Protocol (MCP) + SSE
 - **Database:** Neon PostgreSQL (Production) / SQLite (Local)
 - **AI Models:** Gemini 2.5 Flash + `gemini-embedding-001`
 - **Search Engine:** Tavily Search API
@@ -118,8 +169,10 @@ agentforge/
 │   │   │   ├── analyst_agent.py# Unified Search + SWOT Reasoning
 │   │   │   ├── executor.py     # Deliverable Builder with feedback loop
 │   │   │   ├── verifier.py     # QA Fact-Checker with truncation safeguard
-│   │   │   └── memory_agent.py # Vector Memory & Cosine Similarity
+│   │   │   └── memory_agent.py # Cosine Similarity Vector Search
 │   │   ├── database/           # Neon PostgreSQL / SQLite models & connection pool
+│   │   ├── mcp/                # MCP JSON-RPC Client & Server Manager
+│   │   ├── plugins/            # Workflow Plugin Registry & Implementations
 │   │   └── workflows/
 │   │       ├── state.py        # AgentState TypedDict
 │   │       └── orchestrator.py # LangGraph workflow with parallel_research_node
