@@ -40,6 +40,27 @@ export const api = {
     });
   },
 
+  async approvePlan(taskId: string, subtasks?: Array<{ title: string; description?: string; assigned_agent?: string }>) {
+    return def_fetch(`/tasks/${taskId}/approve_plan`, {
+      method: "POST",
+      body: JSON.stringify({ subtasks }),
+    });
+  },
+
+  async steerTask(taskId: string, steeringPrompt: string = "", action: "steer" | "force_complete" = "steer") {
+    return def_fetch(`/tasks/${taskId}/steer`, {
+      method: "POST",
+      body: JSON.stringify({ steering_prompt: steeringPrompt, action }),
+    });
+  },
+
+  async rejectTask(taskId: string, reason: string = "") {
+    return def_fetch(`/tasks/${taskId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
   async getLogs(taskId: string) {
     return def_fetch(`/tasks/${taskId}/logs`);
   },

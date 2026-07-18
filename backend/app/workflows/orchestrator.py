@@ -125,10 +125,49 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         subtask_count=len(subtask_dicts),
         subtask_titles=[s["title"] for s in subtask_dicts],
     )
-    manager_agent.log_transition(task_id, "Planner", "Router", reason="plan accepted, dispatching subtasks")
+    
+    # ── HITL Plan Approval Gate ──────────────────────────────────────────
+    update_task_in_db(task_id, "awaiting_plan_approval")
+    manager_agent.log_db(
+        task_id, None, "manager_decision",
+        "⏸️ [Manager] Goal decomposed. Execution paused — awaiting user plan approval and dynamic edits in control console."
+    )
+
+    # Pause until user approves/modifies plan via API (status -> running) or cancels (status -> cancelled)
+    while True:
+        db = SessionLocal()
+        try:
+            t = db.query(Task).filter(Task.id == task_id).first()
+            curr_status = t.status if t else "failed"
+        finally:
+            db.close()
+
+        if curr_status == "running":
+            break
+        elif curr_status in ("cancelled", "failed"):
+            logger.info(f"Task {task_id} was cancelled by user during plan approval.")
+            return {
+                "subtasks": subtask_dicts,
+                "current_subtask_index": 0,
+                "agent_outputs": {},
+                "agent_sequence": ["Planner"],
+                "logs": []
+            }
+        await asyncio.sleep(0.5)
+
+    # Re-fetch subtasks in case user edited, added, or re-ordered subtasks in UI
+    db = SessionLocal()
+    updated_subtask_dicts = []
+    try:
+        subs = db.query(Subtask).filter(Subtask.task_id == task_id).order_by(Subtask.order_index.asc()).all()
+        updated_subtask_dicts = [s.to_dict() for s in subs]
+    finally:
+        db.close()
+
+    manager_agent.log_transition(task_id, "Planner", "Router", reason="user approved plan, dispatching subtasks")
 
     return {
-        "subtasks": subtask_dicts,
+        "subtasks": updated_subtask_dicts if updated_subtask_dicts else subtask_dicts,
         "current_subtask_index": 0,
         "agent_outputs": {},
         "agent_sequence": ["Planner"],
@@ -354,7 +393,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         subtask_id=None
     )
 
-    # ── Self-healing retry loop ───────────────────────────────────────────
+    # ── Self-healing retry / HITL steering loop ───────────────────────────
     if not result.is_valid and retry_count < 3:
         manager_agent.log_verifier_retry(
             task_id=task_id,
@@ -366,15 +405,68 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         for sub in state["subtasks"]:
             if sub["assigned_agent"] == "verifier":
                 update_subtask_in_db(sub["id"], "running",
-                                     output=f"Verification failed. Feedback: {result.feedback}")
+                                     output=f"Verification flag. Feedback: {result.feedback}")
+
+        # ── HITL Steering Pause Gate ──
+        update_task_in_db(task_id, "awaiting_steering")
+        manager_agent.log_db(
+            task_id, None, "manager_decision",
+            f"⏸️ [Manager] Deliverable QA confidence is {result.confidence_score:.0%}. Execution paused for user steering feedback..."
+        )
+
+        # Pause until user provides dynamic steering (status -> running), forces complete (status -> completed), or cancels (status -> cancelled)
+        user_steering = ""
+        user_completed = False
+        while True:
+            db = SessionLocal()
+            try:
+                t = db.query(Task).filter(Task.id == task_id).first()
+                curr_status = t.status if t else "failed"
+                # Check for user steering log
+                latest_steering_log = (
+                    db.query(AgentLog)
+                    .filter(AgentLog.task_id == task_id, AgentLog.log_type == "steering")
+                    .order_by(AgentLog.id.desc())
+                    .first()
+                )
+                if latest_steering_log:
+                    user_steering = latest_steering_log.content
+            finally:
+                db.close()
+
+            if curr_status == "running":
+                break
+            elif curr_status == "completed":
+                user_completed = True
+                break
+            elif curr_status in ("cancelled", "failed"):
+                logger.info(f"Task {task_id} was cancelled by user during steering.")
+                break
+            await asyncio.sleep(0.5)
+
+        if user_completed:
+            # User accepted current deliverable as complete
+            return {
+                "verification_results": {
+                    "is_valid": True,
+                    "confidence_score": result.confidence_score,
+                    "feedback": result.feedback
+                },
+                "verifier_feedback": "",
+                "final_result": result.verified_output,
+            }
+
+        effective_feedback = result.feedback
+        if user_steering:
+            effective_feedback = f"{result.feedback}\n\nUser Steering Guidance: {user_steering}"
 
         return {
             "verification_results": {
                 "is_valid":         result.is_valid,
                 "confidence_score": result.confidence_score,
-                "feedback":         result.feedback
+                "feedback":         effective_feedback
             },
-            "verifier_feedback": result.feedback,
+            "verifier_feedback": effective_feedback,
             "retry_count":       retry_count + 1,
         }
 

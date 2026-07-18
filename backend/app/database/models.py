@@ -12,7 +12,7 @@ class Task(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     prompt = Column(Text, nullable=False)
-    status = Column(String, default="pending")  # pending, running, completed, failed
+    status = Column(String, default="pending")  # pending, awaiting_plan_approval, running, awaiting_steering, completed, failed, cancelled
     plugin_name = Column(String, nullable=False)
     final_result = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

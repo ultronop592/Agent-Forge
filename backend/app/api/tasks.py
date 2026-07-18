@@ -16,6 +16,22 @@ class TaskCreate(BaseModel):
     prompt: str
     plugin_name: str
 
+class SubtaskUpdate(BaseModel):
+    id: str | None = None
+    title: str
+    description: str = ""
+    assigned_agent: str = "analyst"
+
+class ApprovePlanPayload(BaseModel):
+    subtasks: List[SubtaskUpdate] | None = None
+
+class SteerPayload(BaseModel):
+    steering_prompt: str = ""
+    action: str = "steer"  # "steer" | "force_complete"
+
+class RejectPayload(BaseModel):
+    reason: str = ""
+
 async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
     try:
         initial_state: AgentState = {
@@ -103,6 +119,105 @@ def delete_task(task_id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Task {task_id} deleted successfully"}
 
+@router.post("/{task_id}/approve_plan")
+def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if payload.subtasks is not None:
+        # User customized the subtasks list: delete existing and replace with modified list
+        db.query(Subtask).filter(Subtask.task_id == task_id).delete()
+        db.commit()
+
+        for idx, sub in enumerate(payload.subtasks):
+            new_sub = Subtask(
+                task_id=task_id,
+                title=sub.title,
+                description=sub.description,
+                assigned_agent=sub.assigned_agent,
+                status="pending",
+                order_index=idx
+            )
+            db.add(new_sub)
+        db.commit()
+
+    task.status = "running"
+    db.commit()
+
+    # Log Manager approval action
+    log = AgentLog(
+        task_id=task_id,
+        agent_name="Manager",
+        log_type="manager_decision",
+        content="✅ [Manager] User approved execution plan. Resuming workforce execution..."
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Plan approved successfully", "status": "running"}
+
+@router.post("/{task_id}/steer")
+def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if payload.action == "force_complete":
+        task.status = "completed"
+        db.commit()
+        log = AgentLog(
+            task_id=task_id,
+            agent_name="Manager",
+            log_type="manager_decision",
+            content="✅ [Manager] User accepted current deliverable and forced completion."
+        )
+        db.add(log)
+        db.commit()
+        return {"message": "Task completed by user override", "status": "completed"}
+
+    # Action is steer: record steering prompt and resume running
+    task.status = "running"
+    db.commit()
+
+    steer_log = AgentLog(
+        task_id=task_id,
+        agent_name="User",
+        log_type="steering",
+        content=payload.steering_prompt
+    )
+    manager_log = AgentLog(
+        task_id=task_id,
+        agent_name="Manager",
+        log_type="manager_decision",
+        content=f"🔄 [Manager] User steering feedback received: '{payload.steering_prompt}'. Resuming execution..."
+    )
+    db.add(steer_log)
+    db.add(manager_log)
+    db.commit()
+
+    return {"message": "Steering feedback applied", "status": "running"}
+
+@router.post("/{task_id}/reject")
+def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task.status = "cancelled"
+    db.commit()
+
+    log = AgentLog(
+        task_id=task_id,
+        agent_name="Manager",
+        log_type="manager_decision",
+        content=f"❌ [Manager] Task execution cancelled by user. {payload.reason}".strip()
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Task cancelled", "status": "cancelled"}
+
 @router.get("/{task_id}/logs")
 def get_logs(task_id: str, db: Session = Depends(get_db)):
     logs = db.query(AgentLog).filter(AgentLog.task_id == task_id).order_by(AgentLog.id.asc()).all()
@@ -173,7 +288,7 @@ async def stream_task_updates(task_id: str):
                     yield f"data: {json.dumps(payload)}\n\n"
 
                 # ── Terminal condition ───────────────────────────────────
-                if task.status in ("completed", "failed"):
+                if task.status in ("completed", "failed", "cancelled"):
                     # Send one final done event so the client knows cleanly
                     yield f"data: {json.dumps({'done': True, 'status': task.status})}\n\n"
                     break

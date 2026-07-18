@@ -19,6 +19,8 @@ import {
   ListTodo,
   Trash2
 } from "lucide-react";
+import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
+import SteeringPanel from "@/components/SteeringPanel";
 
 interface Subtask {
   id: string;
@@ -131,13 +133,56 @@ function WorkspaceInner() {
         setConfidenceScore(verifierSub.confidence_score || 0.95);
       }
 
-      if (taskData.status === "running") {
+      if (["running", "awaiting_plan_approval", "awaiting_steering"].includes(taskData.status)) {
         connectStream(id);
       } else {
         setActiveTab(taskData.status === "completed" ? "result" : "graph");
       }
     } catch (e) {
       console.error("Error loading task detail:", e);
+    }
+  };
+
+  const handleApprovePlan = async (editedSubtasks: EditableSubtask[]) => {
+    if (!taskId) return;
+    try {
+      await api.approvePlan(taskId, editedSubtasks);
+      setTaskStatus("running");
+      connectStream(taskId);
+    } catch (e) {
+      alert("Failed to approve plan: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleSteerTask = async (steeringPrompt: string) => {
+    if (!taskId) return;
+    try {
+      await api.steerTask(taskId, steeringPrompt, "steer");
+      setTaskStatus("running");
+      connectStream(taskId);
+    } catch (e) {
+      alert("Failed to send steering feedback: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleForceCompleteTask = async () => {
+    if (!taskId) return;
+    try {
+      await api.steerTask(taskId, "", "force_complete");
+      setTaskStatus("completed");
+      setActiveTab("result");
+    } catch (e) {
+      alert("Failed to force complete task: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleRejectTask = async () => {
+    if (!taskId) return;
+    try {
+      await api.rejectTask(taskId, "User rejected task in control console");
+      setTaskStatus("cancelled");
+    } catch (e) {
+      alert("Failed to reject task: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -435,6 +480,29 @@ function WorkspaceInner() {
 
         {/* Right Side Column: Tab Viewports (span 8) */}
         <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5 bg-slate-950/10">
+          {/* HITL Plan Approval Gate */}
+          {taskStatus === "awaiting_plan_approval" && (
+            <PlanEditorCard
+              initialSubtasks={subtasks}
+              onApprove={handleApprovePlan}
+              onReject={handleRejectTask}
+            />
+          )}
+
+          {/* HITL Dynamic Steering Intercept Panel */}
+          {taskStatus === "awaiting_steering" && (
+            <SteeringPanel
+              confidenceScore={confidenceScore}
+              verifierFeedback={
+                logs.filter((l) => l.agent_name === "Verifier").pop()?.content ||
+                "The Verifier requested feedback on the deliverable prior to final verification."
+              }
+              onSteer={handleSteerTask}
+              onForceComplete={handleForceCompleteTask}
+              onCancel={handleRejectTask}
+            />
+          )}
+
           {/* Tabs header selector */}
           <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
             {[
