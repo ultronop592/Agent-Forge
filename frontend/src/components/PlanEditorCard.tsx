@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   CheckCircle, 
   XCircle, 
@@ -8,7 +8,8 @@ import {
   Trash2, 
   ArrowUp, 
   ArrowDown, 
-  Layers
+  Layers,
+  Clock
 } from "lucide-react";
 
 export interface EditableSubtask {
@@ -43,6 +44,15 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
         ]
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
 
   const handleTitleChange = (index: number, newTitle: string) => {
     setSubtasks((prev) => {
@@ -63,27 +73,32 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
   const handleAddSubtask = () => {
     setSubtasks((prev) => [
       ...prev,
-      {
-        title: "New Subtask step...",
-        description: "",
-        assigned_agent: "analyst",
-      },
+      { title: "New Custom Subtask", description: "", assigned_agent: "analyst" },
     ]);
   };
 
-  const handleDeleteSubtask = (index: number) => {
-    if (subtasks.length <= 1) return;
+  const handleRemoveSubtask = (index: number) => {
     setSubtasks((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleMove = (index: number, direction: "up" | "down") => {
-    const targetIdx = direction === "up" ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= subtasks.length) return;
+  const handleMoveUp = (index: number) => {
+    if (index === 0) return;
     setSubtasks((prev) => {
       const copy = [...prev];
-      const temp = copy[index];
-      copy[index] = copy[targetIdx];
-      copy[targetIdx] = temp;
+      const temp = copy[index - 1];
+      copy[index - 1] = copy[index];
+      copy[index] = temp;
+      return copy;
+    });
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index === subtasks.length - 1) return;
+    setSubtasks((prev) => {
+      const copy = [...prev];
+      const temp = copy[index + 1];
+      copy[index + 1] = copy[index];
+      copy[index] = temp;
       return copy;
     });
   };
@@ -122,6 +137,9 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
                 Human-in-the-Loop Gate
               </span>
               <span className="text-xs text-slate-400 font-semibold">Plan Generated</span>
+              <span className="flex items-center gap-1 text-[11px] text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full ml-1">
+                <Clock className="w-3 h-3 animate-spin" /> Auto-proceeding in {secondsLeft}s
+              </span>
             </div>
             <h3 className="text-lg font-bold text-white mt-1">Review & Customize Execution Plan</h3>
           </div>

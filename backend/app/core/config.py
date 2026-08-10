@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, validation_alias="PORT")
     mcp_servers_json: str = Field(default="[]", validation_alias="MCP_SERVERS_JSON")
     api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
+    hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
 
 settings = Settings()
+
 

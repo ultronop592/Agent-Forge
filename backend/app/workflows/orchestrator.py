@@ -11,10 +11,12 @@ from backend.app.agents.verifier import VerifierAgent
 from backend.app.agents.memory_agent import MemoryAgent
 from backend.app.agents.manager_agent import ManagerAgent
 
+from backend.app.core.config import settings
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
 
 logger = logging.getLogger("agentforge.workflows")
+
 
 # ---------------------------------------------------------------------------
 # Context truncation helpers
@@ -125,35 +127,50 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         subtask_count=len(subtask_dicts),
         subtask_titles=[s["title"] for s in subtask_dicts],
     )
-    
     # ── HITL Plan Approval Gate ──────────────────────────────────────────
     update_task_in_db(task_id, "awaiting_plan_approval")
+    timeout_sec = getattr(settings, "hitl_timeout_seconds", 60.0)
+
     manager_agent.log_db(
         task_id, None, "manager_decision",
-        "⏸️ [Manager] Goal decomposed. Execution paused — awaiting user plan approval and dynamic edits in control console."
+        f"⏸️ [Manager] Goal decomposed. Execution paused — awaiting user plan approval in control console (Auto-proceeding in {int(timeout_sec)}s if no response)."
     )
 
-    # Pause until user approves/modifies plan via API (status -> running) or cancels (status -> cancelled)
-    while True:
-        db = SessionLocal()
-        try:
+    # Pause until user approves/modifies plan via API (status -> running), cancels (status -> cancelled), or timeout triggers auto-proceed
+    elapsed = 0.0
+    poll_interval = 0.5
+    curr_status = "awaiting_plan_approval"
+
+    db = SessionLocal()
+    try:
+        while elapsed < timeout_sec:
             t = db.query(Task).filter(Task.id == task_id).first()
             curr_status = t.status if t else "failed"
-        finally:
-            db.close()
 
-        if curr_status == "running":
-            break
-        elif curr_status in ("cancelled", "failed"):
-            logger.info(f"Task {task_id} was cancelled by user during plan approval.")
-            return {
-                "subtasks": subtask_dicts,
-                "current_subtask_index": 0,
-                "agent_outputs": {},
-                "agent_sequence": ["Planner"],
-                "logs": []
-            }
-        await asyncio.sleep(0.5)
+            if curr_status == "running":
+                break
+            elif curr_status in ("cancelled", "failed"):
+                logger.info(f"Task {task_id} was cancelled by user during plan approval.")
+                return {
+                    "subtasks": subtask_dicts,
+                    "current_subtask_index": 0,
+                    "agent_outputs": {},
+                    "agent_sequence": ["Planner"],
+                    "logs": []
+                }
+
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= timeout_sec and curr_status == "awaiting_plan_approval":
+            logger.info(f"Task {task_id} HITL plan approval timed out after {timeout_sec}s. Auto-proceeding.")
+            update_task_in_db(task_id, "running")
+            manager_agent.log_db(
+                task_id, None, "manager_decision",
+                f"⏱️ [Manager] No user action within {int(timeout_sec)}s timeout. Auto-proceeding with AI execution plan."
+            )
+    finally:
+        db.close()
 
     # Re-fetch subtasks in case user edited, added, or re-ordered subtasks in UI
     db = SessionLocal()
@@ -164,7 +181,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     finally:
         db.close()
 
-    manager_agent.log_transition(task_id, "Planner", "Router", reason="user approved plan, dispatching subtasks")
+    manager_agent.log_transition(task_id, "Planner", "Router", reason="user approved plan or timeout auto-proceeded, dispatching subtasks")
 
     return {
         "subtasks": updated_subtask_dicts if updated_subtask_dicts else subtask_dicts,
@@ -173,6 +190,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         "agent_sequence": ["Planner"],
         "logs": []
     }
+
 
 
 async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
@@ -409,20 +427,24 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 
         # ── HITL Steering Pause Gate ──
         update_task_in_db(task_id, "awaiting_steering")
+        timeout_sec = getattr(settings, "hitl_timeout_seconds", 60.0)
         manager_agent.log_db(
             task_id, None, "manager_decision",
-            f"⏸️ [Manager] Deliverable QA confidence is {result.confidence_score:.0%}. Execution paused for user steering feedback..."
+            f"⏸️ [Manager] Deliverable QA confidence is {result.confidence_score:.0%}. Execution paused for user steering feedback (Auto-retrying in {int(timeout_sec)}s if no response)..."
         )
 
-        # Pause until user provides dynamic steering (status -> running), forces complete (status -> completed), or cancels (status -> cancelled)
         user_steering = ""
         user_completed = False
-        while True:
-            db = SessionLocal()
-            try:
+        elapsed = 0.0
+        poll_interval = 0.5
+        curr_status = "awaiting_steering"
+
+        db = SessionLocal()
+        try:
+            while elapsed < timeout_sec:
                 t = db.query(Task).filter(Task.id == task_id).first()
                 curr_status = t.status if t else "failed"
-                # Check for user steering log
+
                 latest_steering_log = (
                     db.query(AgentLog)
                     .filter(AgentLog.task_id == task_id, AgentLog.log_type == "steering")
@@ -431,18 +453,29 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                 )
                 if latest_steering_log:
                     user_steering = latest_steering_log.content
-            finally:
-                db.close()
 
-            if curr_status == "running":
-                break
-            elif curr_status == "completed":
-                user_completed = True
-                break
-            elif curr_status in ("cancelled", "failed"):
-                logger.info(f"Task {task_id} was cancelled by user during steering.")
-                break
-            await asyncio.sleep(0.5)
+                if curr_status == "running":
+                    break
+                elif curr_status == "completed":
+                    user_completed = True
+                    break
+                elif curr_status in ("cancelled", "failed"):
+                    logger.info(f"Task {task_id} was cancelled by user during steering.")
+                    break
+
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+
+            if elapsed >= timeout_sec and curr_status == "awaiting_steering":
+                logger.info(f"Task {task_id} HITL steering timed out after {timeout_sec}s. Auto-retrying.")
+                update_task_in_db(task_id, "running")
+                manager_agent.log_db(
+                    task_id, None, "manager_decision",
+                    f"⏱️ [Manager] No user steering input within {int(timeout_sec)}s timeout. Auto-retrying with Verifier feedback."
+                )
+        finally:
+            db.close()
+
 
         if user_completed:
             # User accepted current deliverable as complete

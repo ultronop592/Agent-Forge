@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Compass, 
   Send, 
   CheckCircle, 
   XCircle, 
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  Clock
 } from "lucide-react";
 
 interface SteeringPanelProps {
@@ -27,6 +28,14 @@ export default function SteeringPanel({
 }: SteeringPanelProps) {
   const [steeringText, setSteeringText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSteerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,10 +87,14 @@ export default function SteeringPanel({
               <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold">
                 🎯 {scorePct}% QA Confidence
               </span>
+              <span className="flex items-center gap-1 text-[10px] text-blue-400 font-mono font-bold bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded ml-1">
+                <Clock className="w-3 h-3 animate-spin" /> Auto-retrying in {secondsLeft}s
+              </span>
             </div>
             <h3 className="text-lg font-bold text-white mt-1">Provide Dynamic Steering Guidance</h3>
           </div>
         </div>
+
         <p className="text-xs text-slate-400 max-w-sm font-medium">
           The Verifier flagged areas for improvement. Inject explicit guidance to steer the Executor or accept the current output.
         </p>
