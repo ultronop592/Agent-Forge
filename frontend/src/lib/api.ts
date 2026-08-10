@@ -3,13 +3,17 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost
 // Utility for fetching JSON
 async function def_fetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(apiKey ? { "X-API-Key": apiKey } : {}),
+    ...(options.headers as Record<string, string>),
+  };
   const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
     ...options,
   });
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || `Request failed with status ${response.status}`);

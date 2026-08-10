@@ -15,5 +15,7 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", validation_alias="HOST")
     port: int = Field(default=8000, validation_alias="PORT")
     mcp_servers_json: str = Field(default="[]", validation_alias="MCP_SERVERS_JSON")
+    api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
 
 settings = Settings()
+

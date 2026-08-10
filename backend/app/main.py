@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -45,16 +45,19 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Include Routers
-app.include_router(tasks.router, prefix="/api")
-app.include_router(agents.router, prefix="/api")
-app.include_router(memory.router, prefix="/api")
-app.include_router(plugins.router, prefix="/api")
-app.include_router(mcp.router, prefix="/api")
+from backend.app.core.security import verify_api_key
+
+# Include Routers with Security Dependency
+app.include_router(tasks.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(agents.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(memory.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(plugins.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(mcp.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 @app.get("/health")
 def healthcheck():
     return {"status": "healthy", "database": "connected"}
+
 
 @app.on_event("startup")
 async def startup_event():
