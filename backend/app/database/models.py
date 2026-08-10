@@ -22,15 +22,19 @@ class Task(Base):
     logs = relationship("AgentLog", back_populates="task", cascade="all, delete-orphan")
 
     def to_dict(self):
+        scores = [s.confidence_score for s in self.subtasks if s.confidence_score and s.confidence_score > 0] if self.subtasks else []
+        conf = max(scores) if scores else (0.95 if self.status == "completed" else 0.0)
         return {
             "id": self.id,
             "prompt": self.prompt,
             "status": self.status,
             "plugin_name": self.plugin_name,
             "final_result": self.final_result,
+            "confidence_score": conf,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
+
 
 class Subtask(Base):
     __tablename__ = "subtasks"

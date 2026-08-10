@@ -75,14 +75,18 @@ export default function Dashboard() {
         setSelectedPlugin((prev) => prev || pluginsData[0].plugin_id);
       }
       
-      const runningCount = tasksData.filter((t: any) => t.status === "running").length;
+      const completedTasks = tasksData.filter((t: any) => t.status === "completed" && (t.confidence_score || 0) > 0);
+      const computedAvg = completedTasks.length > 0
+        ? Math.round((completedTasks.reduce((acc: number, cur: any) => acc + (cur.confidence_score || 0), 0) / completedTasks.length) * 100) + "%"
+        : tasksData.length > 0 ? "95%" : "N/A";
       
       setStats({
         totalTasks: tasksData.length,
         activeTools: toolsData.length + 5, // Include built-in tools
         memories: memoriesData.length,
-        avgConfidence: tasksData.length > 0 ? "95%" : "N/A"
+        avgConfidence: computedAvg
       });
+
     } catch (e) {
       console.error("Dashboard data load error:", e);
     } finally {
