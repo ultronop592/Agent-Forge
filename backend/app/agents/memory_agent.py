@@ -1,11 +1,25 @@
 import json
 import logging
 from typing import List, Dict, Any, Optional
+
+_HAS_NUMPY = False
+try:
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        import numpy as np
+        _dummy = np.dot(np.array([1.0], dtype=np.float32), np.array([1.0], dtype=np.float32))
+        _HAS_NUMPY = True
+except Exception:
+    _HAS_NUMPY = False
+
+
 from backend.app.agents.base import BaseAgent
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Memory
 
 logger = logging.getLogger("agentforge.agents.memory")
+
 
 class MemoryAgent(BaseAgent):
     def __init__(self):
@@ -38,12 +52,27 @@ class MemoryAgent(BaseAgent):
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
         if len(a) != len(b):
             return 0.0
+        if _HAS_NUMPY:
+            try:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    va, vb = np.array(a, dtype=np.float32), np.array(b, dtype=np.float32)
+                    denom = float(np.linalg.norm(va) * np.linalg.norm(vb))
+                    if denom == 0.0:
+                        return 0.0
+                    return float(np.dot(va, vb) / denom)
+            except Exception:
+                pass
+
+
         dot_product = sum(x * y for x, y in zip(a, b))
         norm_a = sum(x * x for x in a) ** 0.5
         norm_b = sum(y * y for y in b) ** 0.5
         if norm_a == 0.0 or norm_b == 0.0:
             return 0.0
         return dot_product / (norm_a * norm_b)
+
 
     def retrieve_memories(
         self,

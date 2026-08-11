@@ -144,8 +144,10 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     db = SessionLocal()
     try:
         while elapsed < timeout_sec:
+            db.expire_all()
             t = db.query(Task).filter(Task.id == task_id).first()
             curr_status = t.status if t else "failed"
+
 
             if curr_status == "running":
                 break
@@ -442,8 +444,10 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         db = SessionLocal()
         try:
             while elapsed < timeout_sec:
+                db.expire_all()
                 t = db.query(Task).filter(Task.id == task_id).first()
                 curr_status = t.status if t else "failed"
+
 
                 latest_steering_log = (
                     db.query(AgentLog)
