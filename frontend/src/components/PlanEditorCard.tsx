@@ -189,7 +189,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
             <div className="flex items-center gap-1.5 justify-end">
               <button
                 type="button"
-                onClick={() => handleMove(index, "up")}
+                onClick={() => handleMoveUp(index)}
                 disabled={index === 0}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 title="Move up"
@@ -198,7 +198,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
               </button>
               <button
                 type="button"
-                onClick={() => handleMove(index, "down")}
+                onClick={() => handleMoveDown(index)}
                 disabled={index === subtasks.length - 1}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 title="Move down"
@@ -207,7 +207,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
               </button>
               <button
                 type="button"
-                onClick={() => handleDeleteSubtask(index)}
+                onClick={() => handleRemoveSubtask(index)}
                 disabled={subtasks.length <= 1}
                 className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 title="Delete step"
