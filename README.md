@@ -33,6 +33,11 @@ Instead of relying on a single slow, error-prone prompt attempt, AgentForge brea
 | 🔌 **Model Context Protocol (MCP)** | ✅ Shipped | Connect and manage external `stdio` tool servers, inspect JSON-RPC schemas, and invoke tools directly from the workspace. |
 | 🧩 **Workflow Plugin Engine** | ✅ Shipped | Modular workflow presets (e.g., *Startup Market Research*, *Software Debugging Suite*) with custom persona overrides and default task chains. |
 | 🐘 **Neon PostgreSQL Integration** | ✅ Shipped | Production connection pooling with `pool_pre_ping=True` and serverless PostgreSQL support on Render. |
+| 🎛️ **Dynamic Token Budget Engine** | ✅ Shipped | Keyword-based 4-tier token allocator (`SMALL` → `XL`) that adapts `max_output_tokens` per agent and subtask complexity, preventing overruns and under-generation. |
+| 🚦 **Human-in-the-Loop Plan Gate** | ✅ Shipped | After planning, the UI surfaces an interactive `PlanEditorCard` — users can reorder, retitle, reassign agents, or add steps before approving execution. Auto-proceeds in 60 s. |
+| 🧭 **Mid-Execution Steering Panel** | ✅ Shipped | When the Verifier flags low confidence, a `SteeringPanel` intercepts execution — users inject custom guidance to steer the Executor or force-accept the draft output. |
+| 🔒 **API Key Security Layer** | ✅ Shipped | Optional `X-API-Key` / `Bearer` token enforcement via `core/security.py`. Public-access mode when `API_SECRET_KEY` is unset; lockdown mode when configured. |
+| 📋 **Launch History & Analytics** | ✅ Shipped | Dedicated `/recent` page with searchable, filterable run history table, real-time success-rate metrics, and direct inspect/delete controls per task. |
 
 ---
 
@@ -141,6 +146,40 @@ To survive proxy idle timeouts (like Render's 55s limit), the `/tasks/{id}/strea
 ### 4. Large Output Safeguard in QA
 Executor deliverables exceeding 6,000 characters are safely truncated for the Verifier's LLM prompt, preventing token-limit hangs while preserving 100% of the original content in the final verified result.
 
+### 5. Dynamic Token Budget Engine (`token_budget.py`)
+A pure-Python keyword classifier (`SMALL` / `MEDIUM` / `LARGE` / `XL`) selects `max_output_tokens` per-agent-per-subtask at runtime:
+
+| Tier | Tokens (Executor) | Trigger Example |
+|------|------------------|-----------------|
+| SMALL | 1,500 | "list", "brief", "what is" |
+| MEDIUM | 3,000 | "debug", "refactor", "compare" |
+| LARGE | 6,000 | "research", "build", "implement" |
+| XL | 10,000 | "investment memo", "system design", "comprehensive" |
+
+Each agent type (`executor`, `researcher`, `reasoner`, `verifier`) has independently tuned ceilings. Context word-count provides an additional automatic tier promotion.
+
+---
+
+## 🚦 Human-in-the-Loop Control Gates
+
+AgentForge includes two production-grade human control points that intercept the autonomous pipeline:
+
+### Plan Editor Gate (Pre-Execution)
+After planning, the UI renders an interactive **`PlanEditorCard`** before any agent runs:
+- ✏️ **Edit** subtask titles inline
+- 🔄 **Reorder** steps with up/down controls
+- 🤖 **Reassign** agents from a dropdown (Memory, Analyst, Executor, Verifier)
+- ➕ **Add** custom subtask steps
+- ⏱️ **Auto-proceeds** in 60 seconds if no input is given
+- ✅ **Approve** to launch, ❌ **Reject** to cancel the entire task
+
+### Mid-Execution Steering Panel (Post-Verification Failure)
+When the Verifier agent scores confidence below threshold, a **`SteeringPanel`** intercepts:
+- 🎯 Displays live **QA confidence score** and Verifier findings
+- 💬 Accepts **free-text steering instructions** injected directly into the next Executor call
+- ⚡ **Force-accept** the current draft or **cancel** the task entirely
+- ⏱️ **Auto-retries** with the original plan in 60 seconds if idle
+
 ---
 
 ## 🛠️ Tech Stack
@@ -163,13 +202,19 @@ agentforge/
 ├── backend/                    # Python FastAPI & LangGraph Engine
 │   ├── app/
 │   │   ├── api/                # REST & SSE Endpoints (tasks, agents, memory, mcp, plugins)
-│   │   ├── agents/             # Agent definitions (planner, manager, memory, analyst, executor, verifier)
+│   │   ├── agents/             # Agent definitions
 │   │   │   ├── base.py         # BaseAgent with rate-limit retries & DB logging
 │   │   │   ├── manager_agent.py# 0-cost Orchestration Coordinator
 │   │   │   ├── analyst_agent.py# Unified Search + SWOT Reasoning
 │   │   │   ├── executor.py     # Deliverable Builder with feedback loop
 │   │   │   ├── verifier.py     # QA Fact-Checker with truncation safeguard
-│   │   │   └── memory_agent.py # Cosine Similarity Vector Search
+│   │   │   ├── memory_agent.py # Cosine Similarity Vector Search
+│   │   │   ├── token_budget.py # [NEW] Dynamic 4-tier token allocator per agent & subtask
+│   │   │   ├── reasoner.py     # Reasoning agent
+│   │   │   └── researcher.py   # Research agent
+│   │   ├── core/               # [NEW] App config & API security
+│   │   │   ├── config.py       # Settings & env vars
+│   │   │   └── security.py     # [NEW] X-API-Key / Bearer token enforcement
 │   │   ├── database/           # Neon PostgreSQL / SQLite models & connection pool
 │   │   ├── mcp/                # MCP JSON-RPC Client & Server Manager
 │   │   ├── plugins/            # Workflow Plugin Registry & Implementations
@@ -179,8 +224,22 @@ agentforge/
 │
 ├── frontend/                   # Next.js 16 Dashboard UI
 │   └── src/
-│       ├── app/                # Pages (Workspace, Memory, MCP, Plugins, Dashboard)
-│       ├── components/         # WorkflowGraph, AgentTerminal (LIVE badge), AgentCard, Timeline
+│       ├── app/
+│       │   ├── page.tsx        # Landing / home page
+│       │   ├── chat/           # Main workspace (task submission + live SSE stream)
+│       │   ├── memory/         # Vector memory explorer
+│       │   ├── mcp/            # MCP server manager
+│       │   ├── plugins/        # Workflow plugin selector
+│       │   └── recent/         # [NEW] Launch history, analytics & audit trail
+│       ├── components/
+│       │   ├── WorkflowGraph.tsx   # Live LangGraph node visualizer
+│       │   ├── AgentTerminal.tsx   # LIVE badge streaming terminal
+│       │   ├── AgentCard.tsx       # Per-agent status card
+│       │   ├── Timeline.tsx        # Execution timeline
+│       │   ├── MarkdownRenderer.tsx# Rich markdown output renderer
+│       │   ├── PlanEditorCard.tsx  # [NEW] Human-in-the-loop plan editor gate
+│       │   ├── SteeringPanel.tsx   # [NEW] Mid-execution human steering intercept
+│       │   └── Sidebar.tsx         # Navigation sidebar
 │       └── lib/                # API & SSE client helpers
 │
 └── README.md
