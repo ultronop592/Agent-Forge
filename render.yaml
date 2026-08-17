@@ -19,3 +19,9 @@ services:
         sync: false # Prompt user to input their Tavily API Key
       - key: MCP_SERVERS_JSON
         value: "[]"
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_PROJECT
+        value: "AgentForge"
+      - key: LANGSMITH_API_KEY
+        sync: false # Prompt user to input their LangSmith API Key
