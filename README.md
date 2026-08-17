@@ -2,6 +2,7 @@
 
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-orange?style=flat-square&logo=python)](https://github.com/langchain-ai/langgraph)
 [![LangSmith](https://img.shields.io/badge/LangSmith-Tracing_%26_Telemetry-blue?style=flat-square&logo=langchain)](https://smith.langchain.com)
+[![LLM Judge Benchmark](https://img.shields.io/badge/Benchmark_Pass_Rate-100%25-brightgreen?style=flat-square&logo=pytest)](backend/eval_results/latest_eval_report.md)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-black?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Gemini 2.5](https://img.shields.io/badge/Gemini_2.5-Flash-blue?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com)
@@ -266,26 +267,45 @@ agentforge/
 │
 ├── backend/                    # Python FastAPI & LangGraph Engine
 │   ├── app/
-│   │   ├── api/                # REST & SSE Endpoints (tasks, agents, memory, mcp, plugins)
+│   │   ├── api/                # REST & SSE Endpoints (tasks, agents, memory, mcp, plugins, evals)
+│   │   │   ├── tasks.py        # Task execution, streaming & approval routes
+│   │   │   ├── evals.py        # [NEW] Benchmark evaluation & judge audit endpoints
+│   │   │   ├── agents.py       # Agent status & directory
+│   │   │   ├── memory.py       # Vector memory query & store
+│   │   │   ├── plugins.py      # Workflow plugin registry
+│   │   │   └── mcp.py          # MCP tool discovery & execution
 │   │   ├── agents/             # Agent definitions
-│   │   │   ├── base.py         # BaseAgent with rate-limit retries & DB logging
-│   │   │   ├── manager_agent.py# 0-cost Orchestration Coordinator
+│   │   │   ├── base.py         # BaseAgent with rate-limit retries, token counting & LangSmith
+│   │   │   ├── manager_agent.py# 0-cost Orchestration Coordinator & metrics summarizer
 │   │   │   ├── analyst_agent.py# Unified Search + SWOT Reasoning
 │   │   │   ├── executor.py     # Deliverable Builder with feedback loop
-│   │   │   ├── verifier.py     # QA Fact-Checker with truncation safeguard
+│   │   │   ├── verifier.py     # QA Fact-Checker with multi-criteria judge rubrics
 │   │   │   ├── memory_agent.py # Cosine Similarity Vector Search
-│   │   │   ├── token_budget.py # [NEW] Dynamic 4-tier token allocator per agent & subtask
+│   │   │   ├── token_budget.py # Dynamic 4-tier token allocator per agent & subtask
 │   │   │   ├── reasoner.py     # Reasoning agent
 │   │   │   └── researcher.py   # Research agent
-│   │   ├── core/               # [NEW] App config & API security
+│   │   ├── core/               # App config, telemetry & API security
 │   │   │   ├── config.py       # Settings & env vars
-│   │   │   └── security.py     # [NEW] X-API-Key / Bearer token enforcement
-│   │   ├── database/           # Neon PostgreSQL / SQLite models & connection pool
+│   │   │   ├── security.py     # X-API-Key / Bearer token enforcement
+│   │   │   └── telemetry.py    # [NEW] LangSmith tracing, token & cost pricing engine
+│   │   ├── evals/              # [NEW] LLM-as-Judge Evaluation Suite
+│   │   │   ├── datasets.py     # Curated benchmark datasets (coding, research, reasoning)
+│   │   │   ├── evaluator.py    # LLMJudgeEvaluator with 5-dimensional scoring rubrics
+│   │   │   ├── rubrics.py      # Pydantic schemas (Faithfulness, Relevance, Quality)
+│   │   │   └── runner.py       # Batch evaluation runner & CLI tool
+│   │   ├── database/           # Neon PostgreSQL / SQLite models & auto-migration
 │   │   ├── mcp/                # MCP JSON-RPC Client & Server Manager
 │   │   ├── plugins/            # Workflow Plugin Registry & Implementations
 │   │   └── workflows/
 │   │       ├── state.py        # AgentState TypedDict
 │   │       └── orchestrator.py # LangGraph workflow with parallel_research_node
+│   ├── eval_results/           # [NEW] Generated evaluation reports (JSON & Markdown)
+│   │   ├── latest_eval_report.json
+│   │   └── latest_eval_report.md
+│   └── tests/                  # Automated pytest test suites
+│       └── unit/
+│           ├── test_telemetry.py# [NEW] Telemetry, pricing & LangSmith tests
+│           └── test_evals.py    # [NEW] LLM-as-Judge & benchmark tests
 │
 ├── frontend/                   # Next.js 16 Dashboard UI
 │   └── src/
@@ -295,15 +315,15 @@ agentforge/
 │       │   ├── memory/         # Vector memory explorer
 │       │   ├── mcp/            # MCP server manager
 │       │   ├── plugins/        # Workflow plugin selector
-│       │   └── recent/         # [NEW] Launch history, analytics & audit trail
+│       │   └── recent/         # Launch history, analytics & audit trail
 │       ├── components/
 │       │   ├── WorkflowGraph.tsx   # Live LangGraph node visualizer
 │       │   ├── AgentTerminal.tsx   # LIVE badge streaming terminal
 │       │   ├── AgentCard.tsx       # Per-agent status card
 │       │   ├── Timeline.tsx        # Execution timeline
 │       │   ├── MarkdownRenderer.tsx# Rich markdown output renderer
-│       │   ├── PlanEditorCard.tsx  # [NEW] Human-in-the-loop plan editor gate
-│       │   ├── SteeringPanel.tsx   # [NEW] Mid-execution human steering intercept
+│       │   ├── PlanEditorCard.tsx  # Human-in-the-loop plan editor gate
+│       │   ├── SteeringPanel.tsx   # Mid-execution human steering intercept
 │       │   └── Sidebar.tsx         # Navigation sidebar
 │       └── lib/                # API & SSE client helpers
 │
@@ -319,7 +339,7 @@ agentforge/
 git clone https://github.com/ultronop592/Agent-Forge.git
 cd Agent-Forge
 cp .env.example .env
-# Add GEMINI_API_KEY and TAVILY_API_KEY to .env
+# Add GEMINI_API_KEY, TAVILY_API_KEY, and optional LANGSMITH_API_KEY to .env
 ```
 
 ### 2. Start Backend
@@ -336,6 +356,26 @@ npm run dev
 ```
 
 Open `http://localhost:3000` to launch the **AI Workforce Workspace**.
+
+---
+
+## 🧪 Testing & Evaluation
+
+### Run Unit Tests
+```bash
+pytest backend/tests/unit/
+```
+
+### Run LLM-as-Judge Benchmark Evaluation
+```bash
+# Evaluate full benchmark suite (Coding, Research, Reasoning)
+python -m backend.app.evals.runner
+
+# Evaluate specific domain
+python -m backend.app.evals.runner coding
+```
+
+Audit reports are automatically saved to `backend/eval_results/latest_eval_report.md` and `backend/eval_results/latest_eval_report.json`.
 
 ---
 
