@@ -15,6 +15,9 @@ class Task(Base):
     status = Column(String, default="pending")  # pending, awaiting_plan_approval, running, awaiting_steering, completed, failed, cancelled
     plugin_name = Column(String, nullable=False)
     final_result = Column(Text, nullable=True)
+    total_tokens = Column(Integer, nullable=True, default=0)
+    total_cost_usd = Column(Float, nullable=True, default=0.0)
+    total_latency_ms = Column(Float, nullable=True, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -24,6 +27,12 @@ class Task(Base):
     def to_dict(self):
         scores = [s.confidence_score for s in self.subtasks if s.confidence_score and s.confidence_score > 0] if self.subtasks else []
         conf = max(scores) if scores else (0.95 if self.status == "completed" else 0.0)
+        
+        # Aggregate logs telemetry if not explicitly stored
+        log_tokens = sum(l.total_tokens or 0 for l in self.logs) if self.logs else 0
+        log_cost = sum(l.cost_usd or 0.0 for l in self.logs) if self.logs else 0.0
+        log_latency = sum(l.latency_ms or 0.0 for l in self.logs) if self.logs else 0.0
+
         return {
             "id": self.id,
             "prompt": self.prompt,
@@ -31,6 +40,9 @@ class Task(Base):
             "plugin_name": self.plugin_name,
             "final_result": self.final_result,
             "confidence_score": conf,
+            "total_tokens": self.total_tokens or log_tokens,
+            "total_cost_usd": round(self.total_cost_usd or log_cost, 6),
+            "total_latency_ms": round(self.total_latency_ms or log_latency, 2),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
@@ -74,8 +86,13 @@ class AgentLog(Base):
     task_id = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     subtask_id = Column(String, ForeignKey("subtasks.id", ondelete="CASCADE"), nullable=True)
     agent_name = Column(String, nullable=False)
-    log_type = Column(String, nullable=False)  # thinking, tool_call, output, error
+    log_type = Column(String, nullable=False)  # thinking, tool_call, output, error, telemetry, manager_decision, steering
     content = Column(Text, nullable=False)
+    prompt_tokens = Column(Integer, nullable=True, default=0)
+    completion_tokens = Column(Integer, nullable=True, default=0)
+    total_tokens = Column(Integer, nullable=True, default=0)
+    latency_ms = Column(Float, nullable=True, default=0.0)
+    cost_usd = Column(Float, nullable=True, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     task = relationship("Task", back_populates="logs")
@@ -89,6 +106,11 @@ class AgentLog(Base):
             "agent_name": self.agent_name,
             "log_type": self.log_type,
             "content": self.content,
+            "prompt_tokens": self.prompt_tokens or 0,
+            "completion_tokens": self.completion_tokens or 0,
+            "total_tokens": self.total_tokens or 0,
+            "latency_ms": round(self.latency_ms or 0.0, 2),
+            "cost_usd": round(self.cost_usd or 0.0, 6),
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 

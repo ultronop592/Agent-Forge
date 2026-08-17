@@ -1,6 +1,7 @@
 # AgentForge 🌌
 
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-orange?style=flat-square&logo=python)](https://github.com/langchain-ai/langgraph)
+[![LangSmith](https://img.shields.io/badge/LangSmith-Tracing_%26_Telemetry-blue?style=flat-square&logo=langchain)](https://smith.langchain.com)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-black?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Gemini 2.5](https://img.shields.io/badge/Gemini_2.5-Flash-blue?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com)
@@ -24,6 +25,7 @@ Instead of relying on a single slow, error-prone prompt attempt, AgentForge brea
 
 | Feature | Status | Description |
 | :--- | :---: | :--- |
+| 📊 **LangSmith Observability & Tracing** | ✅ Shipped | Full workflow trace observability with token tracking, per-agent latency metrics, and real-time cost-per-run calculation. |
 | ⚡ **Parallel Subtask Execution** | ✅ Shipped | `MemoryAgent` and `AnalystAgent` run concurrently via Python's `asyncio.gather()`, cutting research latency by **30%–40%**. |
 | 📉 **5-API-Call Optimization** | ✅ Shipped | Reduced pipeline overhead from 10+ calls to **5 API calls max** by unifying search & reasoning into `AnalystAgent` and reusing query embeddings. |
 | 👑 **0-Cost Manager Coordinator** | ✅ Shipped | The Manager Agent operates as a zero-LLM-cost supervisor, logging pipeline transitions, parallel dispatches, and markdown run summaries. |
@@ -157,6 +159,31 @@ A pure-Python keyword classifier (`SMALL` / `MEDIUM` / `LARGE` / `XL`) selects `
 | XL | 10,000 | "investment memo", "system design", "comprehensive" |
 
 Each agent type (`executor`, `researcher`, `reasoner`, `verifier`) has independently tuned ceilings. Context word-count provides an additional automatic tier promotion.
+
+---
+
+## 📊 Production Observability & LangSmith Tracing
+
+AgentForge features end-to-end telemetry and observability powered by **LangSmith** and native performance logging:
+
+### 1. Live LangSmith Distributed Tracing
+- **Graph & Agent Visualization:** Traces the entire LangGraph execution lifecycle from Planner decomposition through parallel research, execution, and verification loops.
+- **Deep LLM Call Inspection:** Logs system prompts, dynamically allocated tokens, schemas, and model outputs under project tags (`agentforge`, `task_id`, `agent_name`).
+- **Zero Configuration Fallback:** If `LANGSMITH_API_KEY` is not present, AgentForge automatically operates in local telemetry mode, logging all metrics to PostgreSQL/SQLite without external network overhead.
+
+### 2. Token, Latency & Cost Telemetry Engine (`core/telemetry.py`)
+- **Per-Agent Latency:** Microsecond-precision execution timer (`latency_ms`) recorded for every LLM and tool invocation.
+- **Token Tracking:** Real-time extraction of `prompt_tokens`, `completion_tokens`, and `total_tokens` directly from Gemini's `usage_metadata`.
+- **Cost Calculation:** Accurate dollar cost estimation computed per model pricing tier (e.g. Gemini 2.5 Flash at $0.075 / 1M prompt tokens and $0.30 / 1M output tokens).
+- **Executive Manager Summary:** Aggregated pipeline latency, token consumption, and cost displayed in the UI Thinking Console at run completion.
+
+```env
+# Enable LangSmith Tracing in .env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=AgentForge
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
 
 ---
 

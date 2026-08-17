@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     mcp_servers_json: str = Field(default="[]", validation_alias="MCP_SERVERS_JSON")
     api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
     hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
+    
+    # LangSmith Observability & Tracing Settings
+    langsmith_tracing: bool = Field(default=False, validation_alias="LANGSMITH_TRACING")
+    langsmith_api_key: str = Field(default="", validation_alias="LANGSMITH_API_KEY")
+    langsmith_project: str = Field(default="AgentForge", validation_alias="LANGSMITH_PROJECT")
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", validation_alias="LANGSMITH_ENDPOINT")
 
 settings = Settings()
 

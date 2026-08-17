@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 from backend.app.core.config import settings
+from backend.app.core.telemetry import calculate_cost, agent_traceable
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import AgentLog
 
@@ -37,7 +38,18 @@ class BaseAgent:
             logger.warning(f"No GEMINI_API_KEY found. '{self.name}' will operate in demo/mock mode.")
             self.has_llm = False
 
-    def log_db(self, task_id: str, subtask_id: Optional[str], log_type: str, content: str):
+    def log_db(
+        self,
+        task_id: str,
+        subtask_id: Optional[str],
+        log_type: str,
+        content: str,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        latency_ms: float = 0.0,
+        cost_usd: float = 0.0,
+    ):
         db = SessionLocal()
         try:
             log_entry = AgentLog(
@@ -45,7 +57,12 @@ class BaseAgent:
                 subtask_id=subtask_id,
                 agent_name=self.name,
                 log_type=log_type,
-                content=content
+                content=content,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
             )
             db.add(log_entry)
             db.commit()
@@ -54,6 +71,7 @@ class BaseAgent:
         finally:
             db.close()
 
+    @agent_traceable(name="Agent_LLM_Execution", run_type="llm")
     async def execute_llm(
         self,
         prompt: str,
@@ -65,6 +83,7 @@ class BaseAgent:
     ) -> str:
         # Log that thinking is starting
         self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is analyzing prompt:\n\"{prompt[:150]}...\"")
+        start_time = time.perf_counter()
 
         if not self.has_llm:
             # Generate or return mock response
@@ -79,7 +98,22 @@ class BaseAgent:
                     logger.error(f"Mock content failed validation: {e}")
             
             res_content = mock_response_content or "Demo result from " + self.name
-            self.log_db(task_id, subtask_id, "output", res_content)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            
+            # Estimate tokens for offline/demo telemetry
+            p_tokens = int(len(prompt.split()) * 1.3)
+            c_tokens = int(len(res_content.split()) * 1.3)
+            tot_tokens = p_tokens + c_tokens
+            cost = calculate_cost(p_tokens, c_tokens, model="gemini-2.5-flash")
+
+            self.log_db(
+                task_id, subtask_id, "output", res_content,
+                prompt_tokens=p_tokens,
+                completion_tokens=c_tokens,
+                total_tokens=tot_tokens,
+                latency_ms=elapsed_ms,
+                cost_usd=cost
+            )
             return res_content
 
         try:
@@ -96,10 +130,7 @@ class BaseAgent:
                 **config_params
             )
 
-            # Use the dedicated LLM thread pool to avoid contention with the
-            # default FastAPI/asyncio thread pool used by DB writes and other I/O.
             loop = asyncio.get_running_loop()
-            
             max_retries = 3
             
             for attempt in range(max_retries + 1):
@@ -113,9 +144,45 @@ class BaseAgent:
                         
                     response = await loop.run_in_executor(_LLM_EXECUTOR, call_api)
                     result_text = response.text or ""
-                    
-                    # Log the final agent output
-                    self.log_db(task_id, subtask_id, "output", result_text)
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
+                    # Extract usage metadata & token metrics
+                    usage = getattr(response, "usage_metadata", None)
+                    prompt_tokens = getattr(usage, "prompt_token_count", None)
+                    completion_tokens = getattr(usage, "candidates_token_count", None)
+                    total_tokens = getattr(usage, "total_token_count", None)
+
+                    if prompt_tokens is None:
+                        prompt_tokens = int(len(prompt.split()) * 1.3)
+                    if completion_tokens is None:
+                        completion_tokens = int(len(result_text.split()) * 1.3)
+                    if total_tokens is None:
+                        total_tokens = prompt_tokens + completion_tokens
+
+                    cost_usd = calculate_cost(prompt_tokens, completion_tokens, model="gemini-2.5-flash")
+
+                    # Log the final agent output with token & latency telemetry
+                    self.log_db(
+                        task_id, subtask_id, "output", result_text,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        latency_ms=elapsed_ms,
+                        cost_usd=cost_usd
+                    )
+
+                    # Surface high-signal telemetry log
+                    self.log_db(
+                        task_id, subtask_id, "telemetry",
+                        f"📊 [{self.name} Metrics] Latency: {elapsed_ms:.1f}ms | "
+                        f"Tokens: {total_tokens:,} (Prompt: {prompt_tokens:,}, Output: {completion_tokens:,}) | "
+                        f"Est. Cost: ${cost_usd:.6f}",
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        latency_ms=elapsed_ms,
+                        cost_usd=cost_usd
+                    )
                     return result_text
                 
                 except Exception as e:

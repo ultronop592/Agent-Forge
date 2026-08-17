@@ -79,6 +79,14 @@ def update_task_in_db(task_id: str, status: str, final_result: str = None):
             t.status = status
             if final_result is not None:
                 t.final_result = final_result
+            
+            # Aggregate telemetry metrics across agent logs
+            logs = db.query(AgentLog).filter(AgentLog.task_id == task_id).all()
+            if logs:
+                t.total_tokens = sum(l.total_tokens or 0 for l in logs)
+                t.total_cost_usd = sum(l.cost_usd or 0.0 for l in logs)
+                t.total_latency_ms = sum(l.latency_ms or 0.0 for l in logs)
+
             db.commit()
     except Exception as e:
         logger.error(f"Error updating task status: {e}")

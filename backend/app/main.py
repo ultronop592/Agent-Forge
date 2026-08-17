@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from backend.app.core.config import settings
+from backend.app.core.telemetry import setup_langsmith
 from backend.app.database.connection import engine, Base, SessionLocal
 from backend.app.database.models import MCPServer
 from backend.app.mcp.client import mcp_manager
@@ -18,6 +19,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger("agentforge.main")
+
+# Initialize LangSmith / LangGraph tracing environment
+setup_langsmith()
 
 # Generate Database Tables
 try:

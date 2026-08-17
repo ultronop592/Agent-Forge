@@ -162,23 +162,61 @@ class ManagerAgent(BaseAgent):
         Write a structured Markdown run-summary as the final log entry.
         Displayed prominently in the Thinking Console.
         """
+        from backend.app.database.connection import SessionLocal
+        from backend.app.database.models import AgentLog
+        from backend.app.core.config import settings
+        from backend.app.core.telemetry import is_langsmith_enabled
+
         status_emoji = "✅" if status == "completed" else "❌"
         pipeline_str = " → ".join(agent_sequence) if agent_sequence else "N/A"
+
+        # Calculate run metrics from database
+        db = SessionLocal()
+        total_tokens = 0
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_latency_ms = 0.0
+        total_cost = 0.0
+
+        try:
+            logs = db.query(AgentLog).filter(AgentLog.task_id == task_id).all()
+            for log in logs:
+                if log.prompt_tokens:
+                    prompt_tokens += log.prompt_tokens
+                if log.completion_tokens:
+                    completion_tokens += log.completion_tokens
+                if log.total_tokens:
+                    total_tokens += log.total_tokens
+                if log.latency_ms:
+                    total_latency_ms += log.latency_ms
+                if log.cost_usd:
+                    total_cost += log.cost_usd
+        finally:
+            db.close()
+
+        langsmith_status = (
+            f"🟢 Active (`{settings.langsmith_project}`)"
+            if is_langsmith_enabled()
+            else "📊 Local Telemetry (Zero network overhead)"
+        )
 
         summary = (
             f"# 📋 Manager Run Summary\n\n"
             f"**Final Status:** {status_emoji} `{status.upper()}`  \n"
             f"**QA Confidence Score:** `{final_confidence:.0%}`  \n"
-            f"**Self-Healing Retries:** `{verifier_retry_count}`  \n\n"
+            f"**Self-Healing Retries:** `{verifier_retry_count}`  \n"
+            f"**LangSmith Tracing:** {langsmith_status}  \n\n"
             f"## Pipeline Execution Order\n\n"
             f"`{pipeline_str}`\n\n"
-            f"## Optimization Metrics\n\n"
+            f"## Observability & Performance Metrics\n\n"
             f"| Metric | Value |\n"
             f"|--------|-------|\n"
-            f"| Total LLM API Calls | 5 |\n"
-            f"| Manager Overhead | 0 LLM calls (coordinator only) |\n"
-            f"| Embedding Reuse | ✅ Cached prompt vector |\n"
-            f"| Analyst Mode | ✅ Search + Reasoning combined |\n"
+            f"| ⏱️ Total Pipeline Latency | **{total_latency_ms / 1000.0:.2f}s** ({total_latency_ms:.0f}ms) |\n"
+            f"| 🪙 Total Token Consumption | **{total_tokens:,}** (Input: {prompt_tokens:,}, Output: {completion_tokens:,}) |\n"
+            f"| 💵 Estimated LLM Run Cost | **${total_cost:.6f} USD** |\n"
+            f"| 👑 Manager Overhead | 0 LLM calls (Zero token cost) |\n"
+            f"| 🧠 Embedding Vector Reuse | ✅ Cached query vector |\n"
+            f"| 🔍 Analyst Mode | ✅ Unified Search + SWOT Reasoning |\n"
         )
 
         self.log_db(task_id, None, "manager_decision", summary)
