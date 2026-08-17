@@ -1,10 +1,15 @@
+from typing import Optional
 from pydantic import BaseModel, Field
 from backend.app.agents.base import BaseAgent
+from backend.app.core.telemetry import agent_traceable
 
 class VerificationResponse(BaseModel):
-    is_valid: bool = Field(description="True if the output is free of hallucinations and matches criteria")
-    confidence_score: float = Field(description="Score between 0.0 and 1.0 representing output accuracy and consistency")
-    feedback: str = Field(description="Qualitative assessment of the output, highlighting items verified or corrected")
+    is_valid: bool = Field(description="True if the output is free of hallucinations and meets criteria (score >= 0.80)")
+    confidence_score: float = Field(description="Overall composite QA score between 0.0 and 1.0")
+    faithfulness_score: Optional[float] = Field(default=0.95, description="Score (0.0-1.0) assessing factual accuracy and zero hallucinations")
+    relevance_score: Optional[float] = Field(default=0.95, description="Score (0.0-1.0) assessing direct alignment to the original goal")
+    technical_score: Optional[float] = Field(default=0.95, description="Score (0.0-1.0) assessing code quality, bounds checking, or analytical depth")
+    feedback: str = Field(description="Qualitative assessment highlighting items verified, gaps detected, or corrections needed")
     verified_output: str = Field(description="The polished, verified output, with formatting improvements and corrections applied")
 
 class VerifierAgent(BaseAgent):
@@ -12,10 +17,11 @@ class VerifierAgent(BaseAgent):
         super().__init__(
             name="Verifier",
             system_instruction=(
-                "You are the Lead QA & Verification Agent. Your job is to perform both factual consistency verification "
-                "and quality evaluation. Check if the output has hallucinations, is complete, meets all subtask criteria, "
-                "and is well-structured. If it has gaps, syntax issues, or poor quality, mark is_valid=false and provide "
-                "constructive correction feedback. Refine spelling, formatting, and layout for the final output."
+                "You are the Lead QA & LLM-as-Judge Verification Agent. Your job is to rigorously evaluate "
+                "deliverables across standardized criteria: Faithfulness (no hallucinations), Relevance (answers the goal), "
+                "Completeness (all constraints met), Technical Quality (bug-free, SOLID, or deep SWOT rigor), "
+                "and Format Compliance. If the overall composite score falls below 0.80, mark is_valid=false and supply "
+                "actionable correction feedback. Refine spelling, formatting, and layout for the final output."
             )
         )
 

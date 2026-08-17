@@ -25,6 +25,7 @@ Instead of relying on a single slow, error-prone prompt attempt, AgentForge brea
 
 | Feature | Status | Description |
 | :--- | :---: | :--- |
+| 🧪 **LLM-as-Judge Evaluation Suite** | ✅ Shipped | Multi-criteria benchmark evaluation framework (Faithfulness, Relevance, Completeness, Code Quality) with pass-rate analytics. |
 | 📊 **LangSmith Observability & Tracing** | ✅ Shipped | Full workflow trace observability with token tracking, per-agent latency metrics, and real-time cost-per-run calculation. |
 | ⚡ **Parallel Subtask Execution** | ✅ Shipped | `MemoryAgent` and `AnalystAgent` run concurrently via Python's `asyncio.gather()`, cutting research latency by **30%–40%**. |
 | 📉 **5-API-Call Optimization** | ✅ Shipped | Reduced pipeline overhead from 10+ calls to **5 API calls max** by unifying search & reasoning into `AnalystAgent` and reusing query embeddings. |
@@ -183,6 +184,43 @@ LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2_pt_...
 LANGSMITH_PROJECT=AgentForge
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+---
+
+## 🧪 LLM-as-Judge Evaluation Framework & Benchmarks
+
+AgentForge features an **LLM-as-Judge Evaluation Suite** (`app/evals/`) to evaluate the workforce against golden benchmarks.
+
+### 1. Multi-Criteria Evaluation Rubric
+Deliverables are graded across 5 standard dimensions:
+
+| Criterion | Weight | Definition |
+| :--- | :---: | :--- |
+| 🛡️ **Faithfulness / Groundedness** | 25% | Absence of hallucinations; statements are grounded in retrieved context and verified facts. |
+| 🎯 **Answer Relevance** | 25% | Direct alignment with user's core intent without evasive padding. |
+| 🧩 **Completeness & Depth** | 20% | All constraints, edge cases, and required subtasks are thoroughly addressed. |
+| ⚙️ **Technical & Code Quality** | 20% | Correctness, bounds checking, type safety, SOLID compliance, or analytical depth. |
+| 📐 **Format Compliance** | 10% | Clean markdown structure, schemas, tables, and fenced code blocks. |
+
+**Pass Threshold:** An execution passes if **Overall Composite Score $\ge 80\%$** and all critical sub-criteria $\ge 70\%$.
+
+### 2. Standardized Benchmark Dataset (`app/evals/datasets.py`)
+- **Coding Benchmarks:** Thread-Safe LRU Cache with TTL, Sliding Window Log Rate Limiter, Async Database Pool Leak Fix.
+- **Market & Strategic Research:** AI Coding Assistant Competitive Landscape, Vector Database Total Cost of Ownership (TCO).
+- **Multi-Step Reasoning:** Microservices Incident Postmortem & 5-Whys Root Cause Analysis.
+
+### 3. Running Evaluations
+
+```bash
+# Run benchmark evaluation CLI across all datasets
+python -m backend.app.evals.runner
+
+# Run evaluation for specific domain category
+python -m backend.app.evals.runner coding
+
+# Trigger via REST API
+curl -X POST http://localhost:8000/api/evals/run -H "Content-Type: application/json" -d '{"category": "all"}'
 ```
 
 ---

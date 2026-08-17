@@ -52,9 +52,23 @@ class BaseAgent:
     ):
         db = SessionLocal()
         try:
+            from backend.app.database.models import Task, Subtask
+            # Ensure task exists if foreign key is enforced
+            existing_task = db.query(Task).filter(Task.id == task_id).first()
+            if not existing_task:
+                placeholder_task = Task(id=task_id, prompt=f"Task {task_id}", plugin_name="default", status="running")
+                db.add(placeholder_task)
+                db.commit()
+
+            valid_subtask_id = None
+            if subtask_id:
+                sub = db.query(Subtask).filter(Subtask.id == subtask_id).first()
+                if sub:
+                    valid_subtask_id = subtask_id
+
             log_entry = AgentLog(
                 task_id=task_id,
-                subtask_id=subtask_id,
+                subtask_id=valid_subtask_id,
                 agent_name=self.name,
                 log_type=log_type,
                 content=content,
@@ -67,7 +81,7 @@ class BaseAgent:
             db.add(log_entry)
             db.commit()
         except Exception as e:
-            logger.error(f"Failed to write agent log to database: {e}")
+            logger.debug(f"Failed to write agent log to database: {e}")
         finally:
             db.close()
 
