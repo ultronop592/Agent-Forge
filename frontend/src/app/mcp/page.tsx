@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Cpu, Plus, Trash2, Code2, Play, CheckCircle2, AlertTriangle, Hammer } from "lucide-react";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 
 interface MCPServer {
   id: string;
@@ -32,6 +33,11 @@ export default function MCPControlDeck() {
   const [argsInput, setArgsInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  // Deletion modal state
+  const [serverToDelete, setServerToDelete] = useState<MCPServer | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Tool tester state
   const [testingTool, setTestingTool] = useState<MCPTool | null>(null);
@@ -84,13 +90,23 @@ export default function MCPControlDeck() {
     }
   };
 
-  const handleRemoveServer = async (serverName: string) => {
-    if (!confirm(`Are you sure you want to stop and remove MCP server '${serverName}'?`)) return;
+  const handleRequestRemoveServer = (server: MCPServer) => {
+    setDeleteError(null);
+    setServerToDelete(server);
+  };
+
+  const handleConfirmRemoveServer = async () => {
+    if (!serverToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await api.removeMCPServer(serverName);
+      await api.removeMCPServer(serverToDelete.name);
+      setServerToDelete(null);
       loadData();
     } catch (err) {
-      console.error("Failed to remove server:", err);
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -125,7 +141,25 @@ export default function MCPControlDeck() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-9 w-full relative z-10">
-      
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!serverToDelete}
+        onClose={() => {
+          if (!isDeleting) {
+            setServerToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleConfirmRemoveServer}
+        title="Remove MCP Server"
+        description="Are you sure you want to stop the subprocess and disconnect this Model Context Protocol server? Any tools exposed by this server will no longer be callable."
+        itemLabel={serverToDelete?.name}
+        itemSubLabel={serverToDelete ? `Command: ${serverToDelete.command} ${serverToDelete.args}` : undefined}
+        confirmText="Remove Server"
+        isLoading={isDeleting}
+        errorMessage={deleteError}
+      />
+
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
         <div>
@@ -229,8 +263,9 @@ export default function MCPControlDeck() {
                       <span className="text-[10px] text-slate-500 font-mono block mt-0.5">{s.command} {s.args}</span>
                     </div>
                     <button 
-                      onClick={() => handleRemoveServer(s.name)}
-                      className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-rose-500/30 text-slate-500 hover:text-rose-400 transition"
+                      onClick={() => handleRequestRemoveServer(s)}
+                      className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-rose-500/30 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                      title="Remove MCP Server"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

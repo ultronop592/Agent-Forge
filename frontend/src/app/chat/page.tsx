@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
 import SteeringPanel from "@/components/SteeringPanel";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 
 interface Subtask {
   id: string;
@@ -69,6 +70,8 @@ function WorkspaceInner() {
   const [activeTab, setActiveTab] = useState<"graph" | "timeline" | "terminal" | "result">("graph");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -326,17 +329,21 @@ function WorkspaceInner() {
     document.body.removeChild(link);
   };
 
-  const handleDelete = async () => {
+  const handleOpenDeleteModal = () => {
+    setDeleteError(null);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
     if (!taskId) return;
-    if (!confirm("Are you sure you want to delete this task? All subtasks and logs will be permanently deleted.")) {
-      return;
-    }
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       await api.deleteTask(taskId);
+      setShowDeleteModal(false);
       router.push("/chat");
     } catch (err) {
-      alert("Failed to delete task: " + (err instanceof Error ? err.message : String(err)));
+      setDeleteError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsDeleting(false);
     }
@@ -344,6 +351,25 @@ function WorkspaceInner() {
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-screen relative z-10">
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          if (!isDeleting) {
+            setShowDeleteModal(false);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Workforce Task"
+        description="Are you sure you want to permanently delete this task workspace? All agent subtasks, execution logs, and verified reports will be erased."
+        itemLabel={prompt || `Task ID: ${taskId}`}
+        itemSubLabel={taskId ? `ID: ${taskId}` : undefined}
+        confirmText="Delete Task"
+        isLoading={isDeleting}
+        errorMessage={deleteError}
+      />
+
       {/* Upper Navigation Header */}
       <div className="border-b border-slate-900 bg-slate-950/40 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -375,12 +401,11 @@ function WorkspaceInner() {
               </button>
             )}
             <button 
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="px-3 py-1.5 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 text-[11px] text-rose-300 font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+              onClick={handleOpenDeleteModal}
+              className="px-3 py-1.5 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 text-[11px] text-rose-300 font-semibold flex items-center gap-1.5 transition cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>{isDeleting ? "Deleting..." : "Delete Task"}</span>
+              <span>Delete Task</span>
             </button>
           </div>
         )}

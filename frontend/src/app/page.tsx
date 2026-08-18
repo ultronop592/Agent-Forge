@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import AgentCard from "@/components/AgentCard";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { 
   Play, 
   Layers, 
@@ -48,6 +49,10 @@ export default function Dashboard() {
   const [selectedPlugin, setSelectedPlugin] = useState("");
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [stats, setStats] = useState({
     totalTasks: 0,
@@ -114,27 +119,53 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeleteTask = async (taskId: string, e: React.MouseEvent) => {
+  const handleRequestDelete = (task: Task, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this task? All subtasks and logs will be permanently deleted.")) {
-      return;
-    }
+    setDeleteError(null);
+    setTaskToDelete(task);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!taskToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await api.deleteTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await api.deleteTask(taskToDelete.id);
+      setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
       setStats((prev) => ({
         ...prev,
         totalTasks: Math.max(0, prev.totalTasks - 1),
       }));
+      setTaskToDelete(null);
     } catch (err) {
-      alert("Failed to delete task: " + (err instanceof Error ? err.message : String(err)));
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-9 w-full relative z-10">
-      
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!taskToDelete}
+        onClose={() => {
+          if (!isDeleting) {
+            setTaskToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Workforce Task"
+        description="Are you sure you want to permanently delete this task? All subtasks, logs, and outputs will be erased."
+        itemLabel={taskToDelete?.prompt}
+        itemSubLabel={taskToDelete ? `Plugin: ${taskToDelete.plugin_name} • ID: ${taskToDelete.id}` : undefined}
+        confirmText="Delete Task"
+        isLoading={isDeleting}
+        errorMessage={deleteError}
+      />
+
       {/* 2-Column Hero & Quick Launch Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         
@@ -372,8 +403,8 @@ export default function Dashboard() {
                           <ArrowRight className="w-3 h-3" />
                         </Link>
                         <button
-                          onClick={(e) => handleDeleteTask(t.id, e)}
-                          className="text-rose-500 hover:text-rose-450 transition"
+                          onClick={(e) => handleRequestDelete(t, e)}
+                          className="text-rose-500 hover:text-rose-450 transition p-1 hover:bg-rose-500/10 rounded cursor-pointer"
                           title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

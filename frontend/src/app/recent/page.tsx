@@ -16,6 +16,8 @@ import {
   ListFilter
 } from "lucide-react";
 
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
+
 interface Task {
   id: string;
   prompt: string;
@@ -29,6 +31,9 @@ export default function LaunchHistory() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadTasks = async () => {
     try {
@@ -47,17 +52,25 @@ export default function LaunchHistory() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleDeleteTask = async (taskId: string, e: React.MouseEvent) => {
+  const handleRequestDelete = (task: Task, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this task? All subtasks and logs will be permanently deleted.")) {
-      return;
-    }
+    setDeleteError(null);
+    setTaskToDelete(task);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!taskToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await api.deleteTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await api.deleteTask(taskToDelete.id);
+      setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
+      setTaskToDelete(null);
     } catch (err) {
-      alert("Failed to delete task: " + (err instanceof Error ? err.message : String(err)));
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -78,6 +91,25 @@ export default function LaunchHistory() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 w-full relative z-10">
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!taskToDelete}
+        onClose={() => {
+          if (!isDeleting) {
+            setTaskToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Launch Record"
+        description="Are you sure you want to permanently delete this launch execution? All subtasks, timeline logs, and outputs will be erased."
+        itemLabel={taskToDelete?.prompt}
+        itemSubLabel={taskToDelete ? `Plugin: ${taskToDelete.plugin_name} • ID: ${taskToDelete.id}` : undefined}
+        confirmText="Delete Record"
+        isLoading={isDeleting}
+        errorMessage={deleteError}
+      />
+
       {/* Title Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-900 pb-6">
         <div>
@@ -221,7 +253,7 @@ export default function LaunchHistory() {
                           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                         </Link>
                         <button
-                          onClick={(e) => handleDeleteTask(t.id, e)}
+                          onClick={(e) => handleRequestDelete(t, e)}
                           className="text-rose-500 hover:text-rose-400 transition p-1 hover:bg-rose-500/10 rounded cursor-pointer"
                           title="Delete Launch"
                         >
