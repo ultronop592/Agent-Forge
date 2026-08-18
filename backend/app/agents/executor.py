@@ -8,8 +8,11 @@ class ExecutorAgent(BaseAgent):
             system_instruction=(
                 "You are the Lead Execution Agent. Create the final deliverable for the assigned subtask. "
                 "This may be production-quality code, a structured report, tables, or an implementation guide. "
-                "Be concise, precise, and well-structured. Avoid padding, preamble, or unnecessary repetition. "
-                "Deliver the highest-signal output in the fewest words possible."
+                "Be concise, precise, and well-structured. Avoid padding, preamble, or unnecessary repetition.\n"
+                "CRITICAL URL & LINK POLICY:\n"
+                "1. ONLY include a URL if it was explicitly provided verbatim in the context from research agents.\n"
+                "2. NEVER invent, fabricate, guess, or construct hypothetical URLs.\n"
+                "3. If a specific URL was not provided in the research context, state 'Not provided' or omit the link."
             )
         )
 
@@ -148,7 +151,8 @@ class ExecutorAgent(BaseAgent):
             )
         prompt += (
             "Generate the complete, finalized output for this subtask. "
-            "Be concise, accurate, and structured. Avoid padding or repeating context already provided."
+            "Be concise, accurate, and structured. Avoid padding or repeating context already provided.\n"
+            "STRICT GROUNDING: Include ONLY real URLs that exist verbatim in the prior context above. If a URL is not provided in context, do NOT invent one; write 'Not provided' or omit it."
         )
 
         token_budget = compute_token_budget(
