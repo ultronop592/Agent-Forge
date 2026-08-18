@@ -26,85 +26,55 @@
 
 body {
   background-color: #07090e;
-  color: #f8fafc;
+  color: #f1f5f9;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow-x: hidden;
   letter-spacing: -0.01em;
 }
 
 /* ---------------------------------------------------------------------------
- * Custom Sleek Scrollbars
+ * Custom Minimal Scrollbars
  * ------------------------------------------------------------------------- */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(11, 15, 25, 0.5);
+  background: #080b11;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.2);
+  background: #1e293b;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.4);
+  background: #334155;
 }
 
 /* ---------------------------------------------------------------------------
- * Glassmorphic Charcoal Panels
+ * Clean Minimal Charcoal Panels
  * ------------------------------------------------------------------------- */
 .glass-panel {
-  background: rgba(11, 15, 25, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: #0c101a;
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .glass-panel-elevated {
-  background: rgba(14, 20, 33, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(56, 189, 248, 0.15);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 30px -10px rgba(56, 189, 248, 0.08);
+  background: #0f1422;
+  border: 1px solid rgba(56, 189, 248, 0.2);
 }
 
 .glass-panel-interactive {
-  background: rgba(11, 16, 28, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #0c101a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.2s ease;
 }
 .glass-panel-interactive:hover {
-  background: rgba(15, 23, 42, 0.85);
-  border-color: rgba(56, 189, 248, 0.3);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 25px -5px rgba(56, 189, 248, 0.15);
+  background: #111728;
+  border-color: rgba(56, 189, 248, 0.4);
 }
 
 /* ---------------------------------------------------------------------------
- * Glow & Accent Effects
- * ------------------------------------------------------------------------- */
-.glow-primary {
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);
-}
-.glow-primary-lg {
-  box-shadow: 0 0 45px rgba(56, 189, 248, 0.35);
-}
-.glow-emerald {
-  box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
-}
-.glow-rose {
-  box-shadow: 0 0 25px rgba(244, 63, 94, 0.25);
-}
-
-.premium-glow-blue {
-  box-shadow: 0 0 35px -5px rgba(56, 189, 248, 0.28);
-  border-color: rgba(56, 189, 248, 0.3) !important;
-}
-
-/* ---------------------------------------------------------------------------
- * High-Contrast Typography & Gradients
+ * High-Contrast Typography & Minimal Gradient Text
  * ------------------------------------------------------------------------- */
 .text-gradient-ice {
   background: linear-gradient(135deg, #ffffff 40%, #7dd3fc 100%);
@@ -118,29 +88,18 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-.text-gradient-cyan {
-  background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #a855f7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
 /* ---------------------------------------------------------------------------
- * Background Patterns & Grids
+ * Subtle Grid Background
  * ------------------------------------------------------------------------- */
 .bg-grid-pattern {
-  background-size: 36px 36px;
+  background-size: 32px 32px;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-}
-
-.bg-dot-pattern {
-  background-size: 24px 24px;
-  background-image: radial-gradient(rgba(56, 189, 248, 0.1) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
 }
 
 /* ---------------------------------------------------------------------------
- * Animations & Micro-Interactions
+ * Animations
  * ------------------------------------------------------------------------- */
 @keyframes pulse-flow {
   0%, 100% {
@@ -154,66 +113,4 @@ body {
 .animate-pulse-flow {
   stroke-dasharray: 8;
   animation: pulse-flow 2s linear infinite;
-}
-
-@keyframes pulse-ice-key {
-  0% {
-    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
-  }
-}
-
-.pulse-ice {
-  animation: pulse-ice-key 2s infinite;
-}
-
-@keyframes pulse-emerald-key {
-  0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
-}
-
-.pulse-emerald {
-  animation: pulse-emerald-key 2s infinite;
-}
-
-/* Shimmer highlight sweep */
-.shimmer-sweep {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-sweep::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  transform: translateX(-100%);
-  background-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(56, 189, 248, 0.04) 20%,
-    rgba(56, 189, 248, 0.12) 60%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  animation: shimmer-sweep-key 5s infinite;
-  pointer-events: none;
-}
-
-@keyframes shimmer-sweep-key {
-  100% {
-    transform: translateX(100%);
-  }
 }

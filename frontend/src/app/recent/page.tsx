@@ -129,7 +129,7 @@ export default function LaunchHistory() {
 
         <Link 
           href="/chat"
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold transition shadow-lg shadow-sky-950/40 glow-primary self-start md:self-center"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-colors self-start md:self-center"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Launch New Workspace</span>

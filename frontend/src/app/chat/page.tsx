@@ -382,7 +382,7 @@ function WorkspaceInner() {
             {taskStatus === "completed" && finalResult && (
               <button 
                 onClick={downloadResult}
-                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-sky-950/40 glow-primary transition cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-xs font-bold text-slate-950 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5" />
                 <span>Export Report</span>
@@ -409,7 +409,7 @@ function WorkspaceInner() {
             <div className="glass-panel-elevated rounded-2xl p-6 space-y-5 relative overflow-hidden">
               <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3.5">
                 <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 animate-pulse" />
+                  <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-white">
@@ -456,16 +456,16 @@ function WorkspaceInner() {
                 <button 
                   type="submit"
                   disabled={!prompt.trim() || isSubmitting}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-xs font-bold text-white flex items-center justify-center gap-2 transition duration-300 glow-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-xs font-bold text-slate-950 flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
                       <span>Planning workforce steps...</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-3 h-3 fill-white" />
+                      <Play className="w-3 h-3 fill-slate-950" />
                       <span>Orchestrate Workforce Flow</span>
                     </>
                   )}

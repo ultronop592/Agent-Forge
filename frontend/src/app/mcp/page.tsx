@@ -178,7 +178,7 @@ export default function MCPControlDeck() {
         
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-sky-950/40 glow-primary transition cursor-pointer"
+          className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Connect MCP Server</span>
@@ -187,7 +187,7 @@ export default function MCPControlDeck() {
 
       {/* Connect Server Form */}
       {showForm && (
-        <form onSubmit={handleAddServer} className="glass-panel-elevated rounded-2xl p-6 space-y-4 max-w-2xl border border-sky-500/30">
+        <form onSubmit={handleAddServer} className="glass-panel rounded-2xl p-6 space-y-4 max-w-2xl border border-slate-800">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2 text-white font-bold text-xs uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5 text-sky-400" />
@@ -237,7 +237,7 @@ export default function MCPControlDeck() {
             <button 
               type="submit" 
               disabled={isSubmitting || !name.trim() || !command.trim()}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold shadow-lg shadow-emerald-950/40 disabled:opacity-50 cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold disabled:opacity-40 transition-colors cursor-pointer"
             >
               Initialize Handshake
             </button>
@@ -373,9 +373,9 @@ export default function MCPControlDeck() {
                     <button 
                       onClick={handleTestTool}
                       disabled={testingProgress}
-                      className="py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-sky-950/40"
+                      className="py-2.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <Play className="w-3 h-3 fill-white" />
+                      <Play className="w-3 h-3 fill-slate-950" />
                       <span>Execute Tool Trigger</span>
                     </button>
                   </div>

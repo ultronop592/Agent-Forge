@@ -152,7 +152,7 @@ export default function SteeringPanel({
             <button
               type="submit"
               disabled={!steeringText.trim() || isSubmitting}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-bold shadow-lg shadow-amber-950/40 flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-40 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Submit Steering Feedback</span>

@@ -116,9 +116,9 @@ export default function PluginsDirectory() {
           </h3>
         </div>
         
-        <div className="glass-panel-elevated border border-slate-800 rounded-2xl p-8 text-center max-w-3xl mx-auto space-y-4">
-          <div className="w-12 h-12 bg-sky-500/15 border border-sky-500/30 rounded-2xl flex items-center justify-center text-sky-400 mx-auto glow-primary">
-            <Download className="w-5 h-5 animate-pulse" />
+        <div className="glass-panel border border-slate-800 rounded-2xl p-8 text-center max-w-3xl mx-auto space-y-4">
+          <div className="w-12 h-12 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center justify-center text-sky-400 mx-auto">
+            <Download className="w-5 h-5" />
           </div>
           <div>
             <h4 className="font-bold text-sm text-white">Expand Your Autonomous Workflow Library</h4>

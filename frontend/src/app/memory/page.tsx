@@ -76,7 +76,7 @@ export default function MemoryBank() {
         
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-sky-950/40 glow-primary transition cursor-pointer"
+          className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Record New Memory</span>
@@ -85,7 +85,7 @@ export default function MemoryBank() {
 
       {/* Insert Memory Form */}
       {showForm && (
-        <form onSubmit={handleAddMemory} className="glass-panel-elevated rounded-2xl p-6 space-y-4 border border-sky-500/30">
+        <form onSubmit={handleAddMemory} className="glass-panel rounded-2xl p-6 space-y-4 border border-slate-800">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2 text-white font-bold text-xs uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5 text-sky-400" />
@@ -121,7 +121,7 @@ export default function MemoryBank() {
             <button 
               type="submit" 
               disabled={isInserting}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Save Knowledge Record</span>

@@ -260,7 +260,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
             type="button"
             onClick={handleApproveClick}
             disabled={isSubmitting}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-sky-950/50 flex items-center gap-2 transition glow-primary cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
           >
             <CheckCircle className="w-4 h-4" />
             <span>Approve & Run Plan</span>
