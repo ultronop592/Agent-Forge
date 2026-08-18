@@ -16,7 +16,6 @@ interface WorkflowGraphProps {
 }
 
 export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphProps) {
-  // Determine agent status
   const getAgentStatus = (agentKey: string): "idle" | "running" | "completed" => {
     if (taskStatus === "failed") return "idle";
     
@@ -27,7 +26,6 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
     
     if (agentKey === "verifier") {
       if (taskStatus === "completed") return "completed";
-      // Running if all non-verifier subtasks are completed and task is running
       const activeSubs = subtasks.filter(s => s.assigned_agent !== "verifier");
       if (activeSubs.length > 0 && activeSubs.every(s => s.status === "completed") && taskStatus === "running") {
         return "running";
@@ -35,32 +33,31 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
       return "idle";
     }
 
-    // For specialized agents (analyst, executor, memory_agent)
     const matchingSubs = subtasks.filter(s => s.assigned_agent === agentKey);
     if (matchingSubs.length === 0) return "idle";
     
     if (matchingSubs.some(s => s.status === "running")) return "running";
     if (matchingSubs.every(s => s.status === "completed")) return "completed";
-    if (matchingSubs.some(s => s.status === "completed")) return "running"; // partially done
+    if (matchingSubs.some(s => s.status === "completed")) return "running";
     
     return "idle";
   };
 
   const getBorderColor = (status: "idle" | "running" | "completed") => {
-    if (status === "running") return "stroke-blue-500 stroke-[3px] filter drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]";
-    if (status === "completed") return "stroke-emerald-500 stroke-[2px]";
+    if (status === "running") return "stroke-sky-400 stroke-[3px] filter drop-shadow-[0_0_12px_rgba(56,189,248,0.6)]";
+    if (status === "completed") return "stroke-emerald-400 stroke-[2px]";
     return "stroke-slate-800 stroke-[1.5px]";
   };
 
   const getBgColor = (status: "idle" | "running" | "completed") => {
-    if (status === "running") return "fill-blue-950/90";
-    if (status === "completed") return "fill-emerald-950/80";
-    return "fill-slate-900/90";
+    if (status === "running") return "fill-[#0c182c]";
+    if (status === "completed") return "fill-[#091e17]";
+    return "fill-[#0c101a]";
   };
 
   const getTextColor = (status: "idle" | "running" | "completed") => {
-    if (status === "running") return "fill-blue-400 font-semibold";
-    if (status === "completed") return "fill-emerald-400";
+    if (status === "running") return "fill-sky-300 font-bold";
+    if (status === "completed") return "fill-emerald-300 font-semibold";
     return "fill-slate-400";
   };
 
@@ -68,12 +65,11 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
     return fromStatus === "completed" && toStatus === "running";
   };
 
-  // Node Positions (x, y) - Spaced for 5 nodes beautifully
   const nodes = {
     planner: { x: 90, y: 150, name: "Planner", role: "Decomposer", icon: Compass },
-    analyst: { x: 250, y: 150, name: "Analyst", role: "Research & SWOT", icon: Search },
-    memory: { x: 410, y: 50, name: "Memory", role: "Recall & Cache", icon: FolderGit },
-    executor: { x: 410, y: 150, name: "Executor", role: "Deliverable/Code", icon: FileCode },
+    analyst: { x: 250, y: 150, name: "Analyst", role: "Search & Reason", icon: Search },
+    memory: { x: 410, y: 50, name: "Memory", role: "Vector Recall", icon: FolderGit },
+    executor: { x: 410, y: 150, name: "Executor", role: "Code & Report", icon: FileCode },
     verifier: { x: 570, y: 150, name: "Verifier", role: "QA Fact-Check", icon: ShieldCheck }
   };
 
@@ -86,47 +82,40 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
   };
 
   return (
-    <div className="glass-panel border border-slate-800 rounded-xl p-5 flex flex-col h-full overflow-hidden shadow-xl">
-      <div className="flex items-center justify-between mb-4 border-b border-slate-900 pb-3">
-        <div className="flex items-center gap-2.5">
-          <h4 className="text-xs text-slate-300 font-semibold uppercase tracking-wider">
-            Active Workforce Collaborative Graph
+    <div className="glass-panel-elevated rounded-2xl p-6 flex flex-col h-full overflow-hidden border border-slate-800/90 shadow-2xl relative">
+      <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3.5">
+        <div className="flex items-center gap-3">
+          <h4 className="text-xs text-white font-bold uppercase tracking-wider">
+            Autonomous Workforce Dynamic Graph
           </h4>
-          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-bold text-amber-400 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Manager Overseeing
+          <span className="px-2.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-[10px] font-bold text-sky-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping" />
+            Manager Orchestrated
           </span>
         </div>
-        <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+        
+        <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
             <span>Idle</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span>Active Thinking</span>
+            <span className="w-2 h-2 rounded-full bg-sky-400 pulse-ice" />
+            <span className="text-sky-300">Active Thinking</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Finished Node</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="text-emerald-300">Completed Node</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center min-h-[220px]">
+      <div className="flex-1 flex items-center justify-center min-h-[240px] relative">
         <svg 
           viewBox="0 0 660 240" 
-          className="w-full max-w-3xl h-auto"
+          className="w-full max-w-3xl h-auto select-none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Defs for Glow Filter */}
-          <defs>
-            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-          </defs>
-
           {/* Connection Lines (Paths) */}
           
           {/* Planner -> Analyst */}
@@ -134,8 +123,8 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
             d={`M ${nodes.planner.x + 35} ${nodes.planner.y} L ${nodes.analyst.x - 35} ${nodes.analyst.y}`}
             className={`fill-none stroke-2 ${
               isEdgeActive(s.planner, s.analyst) 
-                ? "stroke-blue-500 animate-pulse-flow" 
-                : s.analyst === "completed" || s.analyst === "running" ? "stroke-emerald-600" : "stroke-slate-800"
+                ? "stroke-sky-400 animate-pulse-flow" 
+                : s.analyst === "completed" || s.analyst === "running" ? "stroke-emerald-500" : "stroke-slate-800"
             }`}
           />
 
@@ -143,15 +132,15 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
           <path 
             d={`M ${nodes.planner.x + 25} ${nodes.planner.y - 20} Q ${nodes.memory.x - 50} ${nodes.memory.y + 20} ${nodes.memory.x - 35} ${nodes.memory.y}`}
             className={`fill-none stroke-2 stroke-dashed ${
-              s.memory === "completed" || s.memory === "running" ? "stroke-blue-600/60" : "stroke-slate-800/40"
+              s.memory === "completed" || s.memory === "running" ? "stroke-sky-500/70" : "stroke-slate-800/50"
             }`}
           />
 
-          {/* Memory -> Analyst (Data Feed) */}
+          {/* Memory -> Analyst */}
           <path 
             d={`M ${nodes.memory.x} ${nodes.memory.y + 25} L ${nodes.analyst.x + 10} ${nodes.analyst.y - 35}`}
             className={`fill-none stroke-1.5 stroke-dashed ${
-              s.memory === "completed" ? "stroke-emerald-600/50" : "stroke-slate-800/40"
+              s.memory === "completed" ? "stroke-emerald-500/60" : "stroke-slate-800/50"
             }`}
           />
 
@@ -160,8 +149,8 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
             d={`M ${nodes.analyst.x + 35} ${nodes.analyst.y} L ${nodes.executor.x - 35} ${nodes.executor.y}`}
             className={`fill-none stroke-2 ${
               isEdgeActive(s.analyst, s.executor) 
-                ? "stroke-blue-500 animate-pulse-flow" 
-                : s.executor === "completed" || s.executor === "running" ? "stroke-emerald-600" : "stroke-slate-800"
+                ? "stroke-sky-400 animate-pulse-flow" 
+                : s.executor === "completed" || s.executor === "running" ? "stroke-emerald-500" : "stroke-slate-800"
             }`}
           />
 
@@ -170,16 +159,16 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
             d={`M ${nodes.executor.x + 35} ${nodes.executor.y} L ${nodes.verifier.x - 35} ${nodes.verifier.y}`}
             className={`fill-none stroke-2 ${
               isEdgeActive(s.executor, s.verifier) 
-                ? "stroke-blue-500 animate-pulse-flow" 
-                : s.verifier === "completed" ? "stroke-emerald-600" : "stroke-slate-800"
+                ? "stroke-sky-400 animate-pulse-flow" 
+                : s.verifier === "completed" ? "stroke-emerald-500" : "stroke-slate-800"
             }`}
           />
 
-          {/* Verifier -> Memory (Record feedback loop) */}
+          {/* Verifier -> Memory */}
           <path 
             d={`M ${nodes.verifier.x - 20} ${nodes.verifier.y - 20} Q ${nodes.memory.x + 50} ${nodes.memory.y + 20} ${nodes.memory.x + 35} ${nodes.memory.y}`}
             className={`fill-none stroke-1.5 stroke-dashed ${
-              s.verifier === "completed" ? "stroke-emerald-500/45 animate-pulse-flow" : "stroke-slate-800/40"
+              s.verifier === "completed" ? "stroke-emerald-400/60 animate-pulse-flow" : "stroke-slate-800/50"
             }`}
           />
 
@@ -197,7 +186,7 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
                 />
                 
                 {/* Lucide Icon Integration */}
-                <g transform="translate(-8, -8)" className={status === "running" ? "text-blue-400" : status === "completed" ? "text-emerald-400" : "text-slate-500"}>
+                <g transform="translate(-8, -8)" className={status === "running" ? "text-sky-300" : status === "completed" ? "text-emerald-300" : "text-slate-400"}>
                   <foreignObject width="16" height="16">
                     <IconComponent className="w-4 h-4" />
                   </foreignObject>
@@ -214,7 +203,7 @@ export default function WorkflowGraph({ subtasks, taskStatus }: WorkflowGraphPro
                 <text 
                   y="57" 
                   textAnchor="middle" 
-                  className="text-[8px] fill-slate-500 tracking-wide"
+                  className="text-[8px] fill-slate-500 font-medium tracking-wide"
                 >
                   {node.role}
                 </text>

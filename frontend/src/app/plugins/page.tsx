@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { PocketKnife, Puzzle, Download, ArrowUpRight, Search, Sparkles } from "lucide-react";
+import { PocketKnife, Puzzle, Download, ArrowUpRight, Search, Sparkles, Rocket } from "lucide-react";
 import Link from "next/link";
 
 interface Plugin {
@@ -31,69 +31,74 @@ export default function PluginsDirectory() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-9 w-full relative z-10">
-      
-      {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
+      {/* Title Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2.5">
-            <PocketKnife className="w-6 h-6 text-blue-500" />
-            <span>Workforce Plugins Directory</span>
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Plugins define the sequence of subtasks, custom prompt guidelines, and validation constraints that agents follow to accomplish a target goal.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center">
+              <PocketKnife className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">
+                Workforce Plugins Directory
+              </h2>
+              <p className="text-slate-400 text-xs mt-0.5">
+                Plugins define the sequence of subtasks, custom agent prompts, and verification constraints that execute complex goals.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Grid: Active Plugins */}
       <div className="space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Installed Workforce Workflows
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Installed Workflow Blueprints
+          </h3>
+          <span className="text-[10px] text-slate-500 font-semibold">{plugins.length} Available</span>
+        </div>
         
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="h-44 bg-slate-900/40 rounded-xl animate-pulse" />
-            <div className="h-44 bg-slate-900/40 rounded-xl animate-pulse" />
+            <div className="h-44 bg-[#080b12] border border-slate-800 rounded-2xl animate-pulse" />
+            <div className="h-44 bg-[#080b12] border border-slate-800 rounded-2xl animate-pulse" />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {plugins.map((p) => (
               <div 
                 key={p.plugin_id}
-                className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-between hover:border-slate-700/60 transition duration-300 relative overflow-hidden group"
+                className="glass-panel-interactive border border-slate-800/90 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden group"
               >
-                {/* Visual Accent */}
-                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-600/5 rounded-full blur-2xl pointer-events-none group-hover:bg-blue-600/10 transition" />
-                
                 <div className="space-y-3.5">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                        <Puzzle className="w-4 h-4" />
+                      <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                        <Puzzle className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-semibold text-sm text-slate-100">{p.name}</h4>
-                        <span className="text-[9px] text-slate-500 font-mono block mt-0.5">ID: {p.plugin_id}</span>
+                        <h4 className="font-bold text-sm text-white group-hover:text-sky-300 transition-colors">{p.name}</h4>
+                        <span className="text-[10px] text-slate-400 font-mono block mt-0.5">ID: {p.plugin_id}</span>
                       </div>
                     </div>
                     
-                    <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded uppercase tracking-wider">
+                    <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
                       Active
                     </span>
                   </div>
                   
-                  <p className="text-xs text-slate-400 leading-relaxed font-normal">{p.description}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed font-normal">{p.description}</p>
                 </div>
 
-                <div className="border-t border-slate-900/80 pt-4 mt-5 flex justify-between items-center text-xs">
+                <div className="border-t border-slate-800/80 pt-4 mt-5 flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-medium">Standard Workforce Flow</span>
                   <Link 
                     href={`/chat?plugin_id=${p.plugin_id}`}
-                    className="text-blue-400 font-semibold flex items-center gap-1 hover:underline"
+                    className="text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1 group-hover:underline"
                   >
                     <span>Deploy Workspace</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <ArrowUpRight className="w-4 h-4" />
                   </Link>
                 </div>
               </div>
@@ -102,32 +107,29 @@ export default function PluginsDirectory() {
         )}
       </div>
 
-      {/* Plugin Marketplace (Placeholder) */}
+      {/* Plugin Marketplace (Roadmap Preview) */}
       <div className="space-y-4 pt-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Workforce Marketplace
+          <Sparkles className="w-4 h-4 text-sky-400" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Workforce Plugin Marketplace
           </h3>
         </div>
         
-        <div className="glass-panel border border-slate-800/80 rounded-xl p-8 text-center max-w-3xl mx-auto space-y-4">
-          <div className="w-12 h-12 bg-purple-500/10 rounded-full flex items-center justify-center text-purple-400 mx-auto glow-purple/20">
+        <div className="glass-panel-elevated border border-slate-800 rounded-2xl p-8 text-center max-w-3xl mx-auto space-y-4">
+          <div className="w-12 h-12 bg-sky-500/15 border border-sky-500/30 rounded-2xl flex items-center justify-center text-sky-400 mx-auto glow-primary">
             <Download className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h4 className="font-semibold text-sm text-slate-200">Expand Your Automated Capabilities</h4>
+            <h4 className="font-bold text-sm text-white">Expand Your Autonomous Workflow Library</h4>
             <p className="text-xs text-slate-400 mt-1.5 max-w-lg mx-auto leading-relaxed">
-              Integrate plugins for Medical Report Analysis, Fraud Auditing, Document Intelligence, Business Strategy, and Resume Screening.
+              Plug-and-play workflows for Market Competitive Analysis, Python Architecture Refactoring, Real-time Web Scraping, and Document Intelligence.
             </p>
           </div>
           <div className="pt-2">
-            <button 
-              disabled 
-              className="px-4 py-2 bg-purple-600/20 text-purple-400 font-semibold text-xs border border-purple-500/20 rounded-lg cursor-not-allowed"
-            >
-              Marketplace Offline (MVP)
-            </button>
+            <span className="inline-block px-4 py-1.5 bg-sky-500/10 text-sky-400 font-bold text-[10px] uppercase tracking-wider border border-sky-500/20 rounded-full">
+              Enterprise Ecosystem Ready
+            </span>
           </div>
         </div>
       </div>

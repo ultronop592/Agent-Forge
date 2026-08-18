@@ -3,11 +3,11 @@ import { Inter } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "AgentForge - Multi-Agent Collaborative AI Workforce",
-  description: "A collaborative AI workforce that researches, reasons, plans, executes, verifies, and continuously improves complex real-world tasks.",
+  title: "AgentForge — Autonomous AI Workforce Platform",
+  description: "Enterprise-grade multi-agent autonomous workforce platform for research, reasoning, code synthesis, and verified execution.",
 };
 
 export default function RootLayout({
@@ -16,12 +16,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full bg-slate-950 text-slate-100 dark">
-      <body className={`${inter.className} min-h-full flex overflow-hidden`}>
-        {/* Decorative Grid Overlay background */}
-        <div className="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none z-0" />
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none z-0" />
-        <div className="absolute bottom-0 left-64 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[120px] pointer-events-none z-0" />
+    <html lang="en" className="h-full bg-[#07090e] text-slate-100 dark">
+      <body className={`${inter.className} min-h-full flex overflow-hidden antialiased bg-[#07090e]`}>
+        {/* Subtle Ambient Radial Lighting */}
+        <div className="fixed inset-0 bg-grid-pattern opacity-30 pointer-events-none z-0" />
+        <div className="fixed top-[-100px] left-[20%] w-[600px] h-[500px] bg-sky-500/8 rounded-full blur-[140px] pointer-events-none z-0" />
+        <div className="fixed bottom-[-100px] right-[10%] w-[500px] h-[500px] bg-blue-600/6 rounded-full blur-[140px] pointer-events-none z-0" />
         
         {/* Sidebar Navigation */}
         <Sidebar />

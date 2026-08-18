@@ -17,7 +17,12 @@ import {
   FileDown,
   RefreshCcw,
   ListTodo,
-  Trash2
+  Trash2,
+  Copy,
+  Check,
+  Zap,
+  Activity,
+  ShieldCheck
 } from "lucide-react";
 import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
 import SteeringPanel from "@/components/SteeringPanel";
@@ -73,6 +78,7 @@ function WorkspaceInner() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
@@ -119,52 +125,132 @@ function WorkspaceInner() {
 
   const loadHistoricTask = async (id: string) => {
     try {
-      setTaskId(id);
-      const taskData = await api.getTask(id);
-      const logsData = await api.getLogs(id);
-      
-      setPrompt(taskData.prompt);
-      setSelectedPlugin(taskData.plugin_name);
-      setTaskStatus(taskData.status);
-      setFinalResult(taskData.final_result || "");
-      setSubtasks(taskData.subtasks || []);
-      setLogs(logsData || []);
-      
-      // Look for verifier subtask score
-      const verifierSub = (taskData.subtasks || []).find((s: Subtask) => s.assigned_agent === "verifier");
-      if (verifierSub) {
-        setConfidenceScore(verifierSub.confidence_score || 0.95);
-      }
+      const data = await api.getTask(id);
+      setTaskId(data.id);
+      setPrompt(data.prompt);
+      setTaskStatus(data.status);
+      setSubtasks(data.subtasks || []);
+      setLogs(data.logs || []);
+      setFinalResult(data.final_result || "");
+      setConfidenceScore(data.confidence_score);
 
-      if (["running", "awaiting_plan_approval", "awaiting_steering"].includes(taskData.status)) {
-        connectStream(id);
+      if (data.status === "completed" && data.final_result) {
+        setActiveTab("result");
+      } else if (data.status === "running" || data.status === "awaiting_plan_approval" || data.status === "awaiting_steering") {
+        connectSSE(data.id);
+      }
+    } catch (e) {
+      console.error("Failed to load task:", e);
+    }
+  };
+
+  const connectSSE = (tId: string) => {
+    disconnectStream();
+    setIsStreaming(true);
+
+    const sse = new EventSource(api.getStreamUrl(tId));
+    eventSourceRef.current = sse;
+
+    sse.onmessage = (event: MessageEvent) => {
+      reconnectAttemptsRef.current = 0;
+      try {
+        const payload = JSON.parse(event.data);
+        handleStreamPayload(payload);
+      } catch (e) {
+        console.error("Malformed SSE payload", e);
+      }
+    };
+
+    sse.onerror = () => {
+      console.warn("SSE stream disconnected.");
+      disconnectStream();
+
+      if (reconnectAttemptsRef.current < 5) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+        reconnectAttemptsRef.current += 1;
+        reconnectTimerRef.current = setTimeout(() => {
+          connectSSE(tId);
+        }, delay);
       } else {
-        setActiveTab(taskData.status === "completed" ? "result" : "graph");
+        setIsStreaming(false);
       }
-    } catch (e) {
-      console.error("Error loading task detail:", e);
+    };
+  };
+
+  const disconnectStream = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsStreaming(false);
+  };
+
+  const handleStreamPayload = (payload: any) => {
+    const { event_type, data } = payload;
+
+    if (event_type === "task_status") {
+      setTaskStatus(data.status);
+      if (data.status === "completed") {
+        setIsStreaming(false);
+        disconnectStream();
+        if (data.final_result) {
+          setFinalResult(data.final_result);
+          setActiveTab("result");
+        }
+      }
+      if (data.confidence_score) {
+        setConfidenceScore(data.confidence_score);
+      }
+    } else if (event_type === "subtasks_update") {
+      setSubtasks(data.subtasks);
+    } else if (event_type === "agent_log") {
+      setLogs((prev) => [...prev, data]);
+    } else if (event_type === "final_result") {
+      setFinalResult(data.final_result);
+      setTaskStatus("completed");
+      setActiveTab("result");
+      disconnectStream();
     }
   };
 
-  const handleApprovePlan = async (editedSubtasks: EditableSubtask[]) => {
-    if (!taskId) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || isSubmitting || !selectedPlugin) return;
+
+    setIsSubmitting(true);
+    resetWorkspace();
+
     try {
-      await api.approvePlan(taskId, editedSubtasks);
+      const task = await api.createTask(prompt, selectedPlugin);
+      setTaskId(task.id);
       setTaskStatus("running");
-      connectStream(taskId);
-    } catch (e) {
-      alert("Failed to approve plan: " + (e instanceof Error ? e.message : String(e)));
+      router.push(`/chat?task_id=${task.id}`);
+      connectSSE(task.id);
+    } catch (err) {
+      console.error("Workspace launch failed:", err);
+      setTaskStatus("failed");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSteerTask = async (steeringPrompt: string) => {
+  const handleApprovePlan = async (modifiedSubtasks?: EditableSubtask[]) => {
     if (!taskId) return;
     try {
-      await api.steerTask(taskId, steeringPrompt, "steer");
+      await api.approvePlan(taskId, modifiedSubtasks);
       setTaskStatus("running");
-      connectStream(taskId);
-    } catch (e) {
-      alert("Failed to send steering feedback: " + (e instanceof Error ? e.message : String(e)));
+    } catch (e: any) {
+      console.error("Failed to approve plan:", e);
+    }
+  };
+
+  const handleSteerTask = async (instructions: string) => {
+    if (!taskId) return;
+    try {
+      await api.steerTask(taskId, instructions, "steer");
+      setTaskStatus("running");
+    } catch (e: any) {
+      console.error("Failed to steer task:", e);
     }
   };
 
@@ -174,152 +260,25 @@ function WorkspaceInner() {
       await api.steerTask(taskId, "", "force_complete");
       setTaskStatus("completed");
       setActiveTab("result");
-    } catch (e) {
-      alert("Failed to force complete task: " + (e instanceof Error ? e.message : String(e)));
+    } catch (e: any) {
+      console.error("Failed to force complete:", e);
     }
   };
 
   const handleRejectTask = async () => {
     if (!taskId) return;
     try {
-      await api.rejectTask(taskId, "User rejected task in control console");
+      await api.rejectTask(taskId, "Cancelled by user");
       setTaskStatus("cancelled");
-    } catch (e) {
-      alert("Failed to reject task: " + (e instanceof Error ? e.message : String(e)));
-    }
-  };
-
-  const MAX_RECONNECT_ATTEMPTS = 5;
-
-  const connectStream = (id: string, attempt = 0) => {
-    // Close any existing connection first
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    const streamUrl = api.getStreamUrl(id);
-    const es = new EventSource(streamUrl);
-    eventSourceRef.current = es;
-    reconnectAttemptsRef.current = attempt;
-
-    es.onopen = () => {
-      // Reset reconnect counter on successful connect
-      reconnectAttemptsRef.current = 0;
-      setIsStreaming(true);
-    };
-
-    es.onmessage = (event) => {
-      try {
-        const update = JSON.parse(event.data);
-
-        // Ignore heartbeat comments — browser EventSource filters `: ping` automatically
-        // but guard against empty payloads just in case
-        if (!update || update.error) {
-          if (update?.error) console.error("SSE stream error:", update.error);
-          return;
-        }
-
-        // Backend signals clean completion
-        if (update.done) {
-          setIsStreaming(false);
-          if (update.status === "completed") setActiveTab("result");
-          disconnectStream();
-          return;
-        }
-
-        if (update.status) setTaskStatus(update.status);
-        if (update.final_result) setFinalResult(update.final_result);
-        if (update.subtasks)     setSubtasks(update.subtasks);
-
-        if (update.new_logs && update.new_logs.length > 0) {
-          // Auto-switch to terminal tab the first time logs arrive
-          setActiveTab((prev) => prev === "graph" || prev === "timeline" ? "terminal" : prev);
-
-          setLogs((prev) => {
-            const existingIds = new Set(prev.map((l) => l.id));
-            const freshLogs = update.new_logs.filter((l: LogEntry) => !existingIds.has(l.id));
-            return [...prev, ...freshLogs];
-          });
-        }
-
-        const verifierSub = (update.subtasks || []).find(
-          (s: Subtask) => s.assigned_agent === "verifier"
-        );
-        if (verifierSub?.confidence_score) {
-          setConfidenceScore(verifierSub.confidence_score);
-        }
-
-        // Handle terminal states (in case done event is missed)
-        if (update.status === "completed") {
-          setIsStreaming(false);
-          setActiveTab("result");
-          disconnectStream();
-        } else if (update.status === "failed") {
-          setIsStreaming(false);
-          disconnectStream();
-        }
-      } catch (err) {
-        console.error("Failed to parse SSE payload:", err);
-      }
-    };
-
-    es.onerror = () => {
-      // Don't reconnect if task is already done or max retries reached
-      es.close();
-      eventSourceRef.current = null;
-      setIsStreaming(false);
-
-      const nextAttempt = attempt + 1;
-      if (nextAttempt <= MAX_RECONNECT_ATTEMPTS) {
-        const backoffMs = Math.min(1000 * Math.pow(2, attempt), 16000); // 1s,2s,4s,8s,16s
-        console.warn(`SSE disconnected. Reconnecting in ${backoffMs}ms (attempt ${nextAttempt}/${MAX_RECONNECT_ATTEMPTS})...`);
-        reconnectTimerRef.current = setTimeout(() => {
-          // Only reconnect if task is still running
-          setTaskStatus((currentStatus) => {
-            if (currentStatus === "running" || currentStatus === "pending") {
-              connectStream(id, nextAttempt);
-            }
-            return currentStatus;
-          });
-        }, backoffMs);
-      } else {
-        console.error("SSE max reconnect attempts reached. Stopping auto-reconnect.");
-      }
-    };
-  };
-
-  const disconnectStream = () => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsStreaming(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim() || isSubmitting) return;
-
-    setIsSubmitting(true);
-    resetWorkspace();
-    
-    try {
-      const task = await api.createTask(prompt, selectedPlugin);
-      router.push(`/chat?task_id=${task.id}`);
-    } catch (err) {
-      console.error("Task creation failed:", err);
-      setIsSubmitting(false);
+      disconnectStream();
+    } catch (e: any) {
+      console.error("Failed to cancel task:", e);
     }
   };
 
   const downloadResult = () => {
     if (!finalResult) return;
-    const blob = new Blob([finalResult], { type: "text/markdown;charset=utf-8;" });
+    const blob = new Blob([finalResult], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -327,6 +286,13 @@ function WorkspaceInner() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const copyResultToClipboard = () => {
+    if (!finalResult) return;
+    navigator.clipboard.writeText(finalResult);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const handleOpenDeleteModal = () => {
@@ -350,7 +316,7 @@ function WorkspaceInner() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-screen relative z-10">
+    <div className="flex-1 flex flex-col h-full min-h-screen relative z-10 select-none">
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={showDeleteModal}
@@ -371,38 +337,61 @@ function WorkspaceInner() {
       />
 
       {/* Upper Navigation Header */}
-      <div className="border-b border-slate-900 bg-slate-950/40 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-xl px-7 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-500" />
-            <span>AI Workforce Workspace</span>
-          </h2>
-          <p className="text-[11px] text-slate-500 font-medium">
-            Deploy workflows, review tasks division, observe thinking, and export results.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center shadow-sm">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white tracking-tight">
+                  AI Workforce Workspace
+                </h2>
+                {taskId && (
+                  <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${
+                    taskStatus === "completed"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : taskStatus === "running"
+                      ? "bg-sky-500/10 text-sky-400 border-sky-500/20 animate-pulse"
+                      : taskStatus === "awaiting_plan_approval" || taskStatus === "awaiting_steering"
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      : "bg-slate-900 text-slate-400 border-slate-800"
+                  }`}>
+                    {taskStatus}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Autonomous subtask division, real-time thinking logs, and verified deliverable outputs.
+              </p>
+            </div>
+          </div>
         </div>
 
         {taskId && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button 
               onClick={() => router.push("/chat")}
-              className="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[11px] text-slate-300 font-semibold border border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-300 hover:text-white border border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
             >
               <RefreshCcw className="w-3.5 h-3.5" />
-              <span>Reset/New Task</span>
+              <span>New Task</span>
             </button>
+
             {taskStatus === "completed" && finalResult && (
               <button 
                 onClick={downloadResult}
-                className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-[11px] text-white font-semibold flex items-center gap-1.5 shadow glow-primary/20 transition cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-sky-950/40 glow-primary transition cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5" />
                 <span>Export Report</span>
               </button>
             )}
+
             <button 
               onClick={handleOpenDeleteModal}
-              className="px-3 py-1.5 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 text-[11px] text-rose-300 font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-xs font-semibold text-rose-400 flex items-center gap-1.5 transition cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete Task</span>
@@ -412,30 +401,33 @@ function WorkspaceInner() {
       </div>
 
       {/* Main Workspace Workspace Panes */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden h-[calc(100vh-84px)]">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden h-[calc(100vh-73px)]">
         
         {/* Left Side Column: Form input or active Tasks list (span 4) */}
-        <div className="lg:col-span-4 border-r border-slate-900 p-6 overflow-y-auto flex flex-col gap-6 bg-slate-950/20">
+        <div className="lg:col-span-4 border-r border-slate-800/80 p-6 overflow-y-auto flex flex-col gap-5 bg-[#080b12]">
           {!taskId ? (
-            <div className="glass-panel border border-slate-800 rounded-xl p-5 space-y-5 premium-glow-blue relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-16 h-16 bg-blue-600/5 rounded-full blur-xl pointer-events-none" />
-              
-              <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
-                <Sparkles className="w-4 h-4 text-blue-450 animate-pulse" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Deploy Workforce Flow
-                </h3>
+            <div className="glass-panel-elevated rounded-2xl p-6 space-y-5 relative overflow-hidden">
+              <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3.5">
+                <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    Deploy Workforce Flow
+                  </h3>
+                  <span className="text-[10px] text-slate-500">Configure parameters & target goal</span>
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                    1. Select Target Plugin Workflow
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    1. Target Plugin Workflow
                   </label>
                   <select 
                     value={selectedPlugin}
                     onChange={(e) => setSelectedPlugin(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg px-3.5 py-2.5 text-xs text-slate-300 font-medium focus:outline-none focus:border-blue-500/60 transition-all"
+                    className="w-full bg-[#080b12] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-sky-500/60 transition cursor-pointer"
                   >
                     {plugins.map((p) => (
                       <option key={p.plugin_id} value={p.plugin_id}>
@@ -443,28 +435,28 @@ function WorkspaceInner() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-slate-650 leading-normal font-medium">
+                  <p className="text-[10px] text-slate-500 leading-normal font-medium pt-0.5">
                     {plugins.find(p => p.plugin_id === selectedPlugin)?.description}
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                    2. Describe Goal Objectives
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    2. Objective Description
                   </label>
                   <textarea 
                     rows={6}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Provide detailed goals for the workforce. E.g. 'Build a python script implementing a token bucketer' or 'Perform startup analysis on AI voice agents markets.'"
-                    className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500/60 transition-all leading-relaxed resize-none"
+                    placeholder="Provide specific objectives for the workforce. E.g. 'Search and aggregate today's AI developer jobs in India' or 'Build a Python token bucket rate limiter'..."
+                    className="w-full bg-[#080b12] border border-slate-800 rounded-xl p-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500/60 transition leading-relaxed resize-none"
                   />
                 </div>
 
                 <button 
                   type="submit"
                   disabled={!prompt.trim() || isSubmitting}
-                  className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-500 hover:to-indigo-550 text-xs font-bold text-white flex items-center justify-center gap-2 transition duration-300 glow-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-xs font-bold text-white flex items-center justify-center gap-2 transition duration-300 glow-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -481,22 +473,33 @@ function WorkspaceInner() {
               </form>
             </div>
           ) : (
-            <div className="space-y-5 flex flex-col h-full overflow-hidden">
-              <div className="glass-panel border border-slate-805 rounded-xl p-4 space-y-2 premium-glow-purple relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-purple-650/5 rounded-full blur-xl pointer-events-none" />
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Goal Objective:</span>
-                <p className="text-xs text-slate-300 leading-relaxed line-clamp-4 font-medium">{prompt}</p>
+            <div className="space-y-4 flex flex-col h-full overflow-hidden">
+              {/* Goal summary header */}
+              <div className="glass-panel rounded-2xl p-4 space-y-2.5 border border-slate-800/80">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">
+                  Goal Objective:
+                </span>
+                <p className="text-xs text-slate-200 leading-relaxed font-medium select-text">{prompt}</p>
                 
                 {/* Confidence bar if verified */}
                 {confidenceScore !== null && (
-                  <div className="pt-2 border-t border-slate-900 mt-2 flex items-center justify-between text-[10px]">
-                    <span className="text-slate-500 font-medium">Fact Verification Certainty:</span>
-                    <span className="font-bold text-emerald-400">{Math.round(confidenceScore * 100)}%</span>
+                  <div className="pt-2.5 border-t border-slate-800/80 mt-2 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>QA Verification Rating:</span>
+                    </span>
+                    <span className="font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      {Math.round(confidenceScore * 100)}%
+                    </span>
                   </div>
                 )}
               </div>
               
+              {/* Subtask Timeline partition */}
               <div className="flex-1 overflow-y-auto">
+                <div className="px-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Subtask Partition Execution Timeline
+                </div>
                 <Timeline subtasks={subtasks} />
               </div>
             </div>
@@ -504,7 +507,7 @@ function WorkspaceInner() {
         </div>
 
         {/* Right Side Column: Tab Viewports (span 8) */}
-        <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5 bg-slate-950/10">
+        <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5 bg-[#07090e]">
           {/* HITL Plan Approval Gate */}
           {taskStatus === "awaiting_plan_approval" && (
             <PlanEditorCard
@@ -529,34 +532,57 @@ function WorkspaceInner() {
           )}
 
           {/* Tabs header selector */}
-          <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
-            {[
-              { id: "graph", label: "Workflow Graph", icon: BrainCircuit },
-              { id: "timeline", label: "Timeline Progress", icon: ListTodo },
-              { id: "terminal", label: "Thinking Console", icon: TermIcon },
-              { id: "result", label: "Verified Output", icon: CheckCircle, disabled: !finalResult }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              
-              return (
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              {[
+                { id: "graph", label: "Workflow Graph", icon: BrainCircuit },
+                { id: "timeline", label: "Timeline Progress", icon: ListTodo },
+                { id: "terminal", label: "Thinking Console", icon: TermIcon },
+                { id: "result", label: "Verified Output", icon: CheckCircle, disabled: !finalResult }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    disabled={tab.disabled}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer ${
+                      isActive 
+                        ? "bg-sky-500/15 border border-sky-500/40 text-white shadow-sm shadow-sky-500/10" 
+                        : tab.disabled 
+                        ? "border border-transparent text-slate-600 cursor-not-allowed opacity-40" 
+                        : "border border-transparent text-slate-400 hover:text-white hover:bg-slate-900/60"
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? "text-sky-400" : ""}`} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeTab === "result" && finalResult && (
+              <div className="flex items-center gap-2">
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  disabled={tab.disabled}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wide border transition-all duration-300 cursor-pointer ${
-                    isActive 
-                      ? "bg-blue-600/10 border-blue-500/40 text-blue-450 glow-primary/5 scale-[1.03]" 
-                      : tab.disabled 
-                      ? "border-transparent text-slate-805 cursor-not-allowed opacity-40" 
-                      : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 hover:scale-[1.01]"
-                  }`}
+                  onClick={copyResultToClipboard}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-blue-400 animate-pulse" : ""}`} />
-                  <span>{tab.label}</span>
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Markdown</span>
+                    </>
+                  )}
                 </button>
-              );
-            })}
+              </div>
+            )}
           </div>
 
           {/* Tab Content Display */}
@@ -580,7 +606,7 @@ function WorkspaceInner() {
             )}
 
             {activeTab === "result" && finalResult && (
-              <div className="glass-panel border border-slate-800 rounded-xl p-7 text-slate-100 overflow-y-auto leading-relaxed shadow-xl max-w-4xl mx-auto select-text">
+              <div className="glass-panel-elevated rounded-2xl p-7 text-slate-100 overflow-y-auto leading-relaxed shadow-2xl max-w-4xl mx-auto select-text border border-slate-800">
                 <MarkdownRenderer content={finalResult} />
               </div>
             )}
@@ -594,10 +620,10 @@ function WorkspaceInner() {
 export default function Workspace() {
   return (
     <Suspense fallback={
-      <div className="flex-1 flex items-center justify-center min-h-screen">
+      <div className="flex-1 flex items-center justify-center min-h-screen bg-[#07090e]">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-xs text-slate-500 font-medium">Loading workspace...</p>
+          <div className="w-8 h-8 border-2 border-sky-500/30 border-t-sky-400 rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Loading workspace...</p>
         </div>
       </div>
     }>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { BrainCircuit, Search, Calendar, Folder, Plus, Check } from "lucide-react";
+import { BrainCircuit, Search, Calendar, Folder, Plus, Check, Sparkles, Filter } from "lucide-react";
 
 interface Memory {
   id: string;
@@ -55,23 +55,28 @@ export default function MemoryBank() {
   };
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 w-full relative z-10">
-      
-      {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
+    <div className="p-8 max-w-6xl mx-auto space-y-8 w-full relative z-10">
+      {/* Title Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2.5">
-            <BrainCircuit className="w-6 h-6 text-blue-500" />
-            <span>Semantic Memory Bank</span>
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Browse and query factual constraints, code patterns, and strategic outcomes collected during previous runs via Cosine Similarity Vector Search.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center">
+              <BrainCircuit className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">
+                Semantic Memory Bank
+              </h2>
+              <p className="text-slate-400 text-xs mt-0.5">
+                Query factual constraints, code patterns, and strategic insights collected during previous runs via Cosine Vector Search.
+              </p>
+            </div>
+          </div>
         </div>
         
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow transition"
+          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-sky-950/40 glow-primary transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Record New Memory</span>
@@ -80,48 +85,53 @@ export default function MemoryBank() {
 
       {/* Insert Memory Form */}
       {showForm && (
-        <form onSubmit={handleAddMemory} className="glass-panel border border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-900 pb-2.5">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider">Record Learnings Block</h4>
+        <form onSubmit={handleAddMemory} className="glass-panel-elevated rounded-2xl p-6 space-y-4 border border-sky-500/30">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2 text-white font-bold text-xs uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+              <span>Record New Knowledge Chunk</span>
+            </div>
             <select 
               value={newCategory} 
               onChange={(e) => setNewCategory(e.target.value)}
-              className="bg-slate-950 border border-slate-800/80 rounded px-2.5 py-1 text-xs text-slate-400 focus:outline-none"
+              className="bg-[#05070c] border border-slate-800 rounded-lg px-3 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500/50 cursor-pointer"
             >
-              <option value="factual">Factual Record</option>
+              <option value="factual">Factual Constraint</option>
               <option value="insight">Strategic Insight</option>
               <option value="code">Code Pattern</option>
             </select>
           </div>
+
           <textarea 
             rows={3}
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Input key facts or observations you want the agents to recall in future tasks..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 focus:outline-none focus:border-blue-500 leading-relaxed"
+            className="w-full bg-[#080b12] border border-slate-800 rounded-xl p-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500/60 leading-relaxed resize-none"
           />
-          <div className="flex justify-end gap-2 text-xs">
+
+          <div className="flex justify-end gap-2.5 text-xs">
             <button 
               type="button" 
               onClick={() => setShowForm(false)} 
-              className="px-3.5 py-1.5 rounded hover:bg-slate-900 text-slate-400 font-medium"
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-semibold cursor-pointer"
             >
               Cancel
             </button>
             <button 
               type="submit" 
               disabled={isInserting}
-              className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1.5 shadow"
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Save Record</span>
+              <span>Save Knowledge Record</span>
             </button>
           </div>
         </form>
       )}
 
       {/* Query Filters */}
-      <div className="flex flex-col md:flex-row gap-4 items-center">
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         {/* Search */}
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
@@ -129,13 +139,13 @@ export default function MemoryBank() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search semantically inside recorded memories (e.g. 'rate limiter token bucket' or 'SWOT analysis')..."
-            className="w-full bg-slate-950 border border-slate-850/80 rounded-lg pl-10 pr-4 py-3 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+            placeholder="Search semantically inside recorded memories (e.g. 'rate limiter token bucket' or 'market CAGR')..."
+            className="w-full bg-[#080b12] border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500/60 transition"
           />
         </div>
         
         {/* Category selection */}
-        <div className="flex items-center gap-1.5 self-start md:self-auto select-none flex-wrap">
+        <div className="flex items-center gap-2 self-start md:self-auto select-none flex-wrap">
           {[
             { label: "All Categories", val: "" },
             { label: "Factual", val: "factual" },
@@ -147,10 +157,10 @@ export default function MemoryBank() {
               <button
                 key={cat.val}
                 onClick={() => setSelectedCategory(cat.val)}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold border transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   isSelected 
-                    ? "bg-slate-900 text-blue-400 border-blue-500/30" 
-                    : "border-transparent text-slate-400 hover:text-slate-350 hover:bg-slate-900/60"
+                    ? "bg-sky-500/15 text-white border-sky-500/40 shadow-sm shadow-sky-500/10" 
+                    : "border-slate-800 bg-[#080b12] text-slate-400 hover:text-white hover:border-slate-700"
                 }`}
               >
                 {cat.label}
@@ -163,7 +173,7 @@ export default function MemoryBank() {
       {/* Memories Grid list */}
       <div className="space-y-4">
         {memories.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 text-xs italic bg-slate-950 border border-slate-900 rounded-xl">
+          <div className="text-center py-16 text-slate-500 text-xs italic bg-[#080b12] border border-slate-800 rounded-2xl">
             No memories matched your semantic query. Execute a task to record agent observations automatically.
           </div>
         ) : (
@@ -171,28 +181,31 @@ export default function MemoryBank() {
             {memories.map((mem) => (
               <div 
                 key={mem.id}
-                className="glass-panel border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700/80 transition duration-300 space-y-4 relative"
+                className="glass-panel-interactive border border-slate-800/90 rounded-2xl p-5 flex flex-col justify-between space-y-4 relative"
               >
-                <div className="space-y-2">
-                  {mem.match_percentage && (
-                    <div className="flex justify-end">
-                      <span className="px-2 py-0.5 rounded-full bg-blue-950/80 border border-blue-700/40 text-[10px] font-bold text-blue-400">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">
+                      {mem.category}
+                    </span>
+                    {mem.match_percentage && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300">
                         🎯 {mem.match_percentage} Vector Match
                       </span>
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-300 leading-relaxed font-normal select-text whitespace-pre-wrap">
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed font-normal select-text whitespace-pre-wrap">
                     {mem.content}
                   </p>
                 </div>
                 
-                <div className="flex items-center justify-between border-t border-slate-900 pt-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                <div className="flex items-center justify-between border-t border-slate-800/80 pt-3 text-[10px] text-slate-500 font-semibold">
                   <div className="flex items-center gap-1.5">
-                    <Folder className="w-3.5 h-3.5 text-slate-600" />
-                    <span>{mem.category}</span>
+                    <Folder className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Memory Node</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-600" />
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
                     <span>{new Date(mem.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -201,7 +214,6 @@ export default function MemoryBank() {
           </div>
         )}
       </div>
-
     </div>
   );
 }

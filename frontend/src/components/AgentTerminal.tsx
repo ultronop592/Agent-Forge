@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Terminal, ShieldAlert, CheckCircle, Info, ExternalLink } from "lucide-react";
+import { Terminal, ShieldAlert, CheckCircle, Info, ExternalLink, Copy, Check, Filter } from "lucide-react";
 
 interface LogEntry {
   id: number;
   task_id: string;
   subtask_id?: string;
   agent_name: string;
-  log_type: string; // thinking, tool_call, output, error
+  log_type: string;
   content: string;
   created_at: string;
 }
@@ -21,9 +21,9 @@ interface AgentTerminalProps {
 export default function AgentTerminal({ logs, isStreaming = false }: AgentTerminalProps) {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    // Autoscroll to bottom of logs
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
@@ -34,84 +34,119 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
 
   const getLogColor = (type: string) => {
     switch (type) {
-      case "thinking":         return "text-blue-400";
-      case "tool_call":        return "text-amber-400";
-      case "output":           return "text-emerald-400";
+      case "thinking":         return "text-sky-300";
+      case "tool_call":        return "text-amber-300";
+      case "output":           return "text-emerald-300";
       case "error":            return "text-rose-400 font-semibold";
-      case "manager_decision": return "text-amber-300 font-semibold";
+      case "manager_decision": return "text-amber-200 font-semibold";
+      case "telemetry":        return "text-indigo-300";
       default: return "text-slate-300";
     }
   };
 
   const getLogIcon = (type: string) => {
     switch (type) {
-      case "thinking":         return <Info      className="w-3.5 h-3.5 inline mr-1.5 text-blue-500 shrink-0" />;
-      case "tool_call":        return <ExternalLink className="w-3.5 h-3.5 inline mr-1.5 text-amber-500 shrink-0" />;
-      case "output":           return <CheckCircle className="w-3.5 h-3.5 inline mr-1.5 text-emerald-500 shrink-0" />;
-      case "error":            return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-rose-500 shrink-0" />;
-      case "manager_decision": return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-amber-400 shrink-0" />;
+      case "thinking":         return <Info className="w-3.5 h-3.5 inline mr-1.5 text-sky-400 shrink-0" />;
+      case "tool_call":        return <ExternalLink className="w-3.5 h-3.5 inline mr-1.5 text-amber-400 shrink-0" />;
+      case "output":           return <CheckCircle className="w-3.5 h-3.5 inline mr-1.5 text-emerald-400 shrink-0" />;
+      case "error":            return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-rose-400 shrink-0" />;
+      case "manager_decision": return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-amber-300 shrink-0" />;
       default: return null;
     }
   };
 
+  const copyLogs = () => {
+    const text = logs.map(l => `[${l.created_at}] [${l.agent_name}] [${l.log_type}]: ${l.content}`).join("\n");
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-xl flex flex-col h-full overflow-hidden font-mono shadow-2xl">
+    <div className="bg-[#06080d] border border-slate-800 rounded-2xl flex flex-col h-full overflow-hidden font-mono shadow-2xl">
       {/* Terminal Title Bar */}
-      <div className="bg-slate-900 px-5 py-3 border-b border-slate-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Terminal className="w-4 h-4 text-blue-500" />
-          <span className="text-xs text-slate-300 font-semibold uppercase tracking-wider">Live Agent Thinking Console</span>
-          {/* LIVE streaming indicator */}
-          {isStreaming && (
-            <span className="flex items-center gap-1 ml-2 px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-700/40 text-[10px] font-bold text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-              LIVE
+      <div className="bg-[#090d16] px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            <Terminal className="w-4 h-4 text-sky-400" />
+            <span className="text-xs text-white font-bold uppercase tracking-wider">
+              Thinking & Execution Console
             </span>
-          )}
+            {isStreaming && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                LIVE STREAM
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Terminal Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={copyLogs}
+            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+            title="Copy all logs"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span className="text-emerald-400">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" />
+                <span>Copy Logs</span>
+              </>
+            )}
+          </button>
+
           <select 
             value={filter} 
             onChange={(e) => setFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800/60 rounded px-2.5 py-1 text-[11px] text-slate-400 focus:outline-none focus:border-slate-700"
+            className="bg-[#05070c] border border-slate-800 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 font-semibold focus:outline-none focus:border-sky-500/50 cursor-pointer"
           >
-            <option value="all">All Channels</option>
+            <option value="all">All Channels ({logs.length})</option>
             <option value="thinking">Thinking Logs</option>
-            <option value="tool_call">Tool Executions</option>
+            <option value="tool_call">Tool Calls</option>
             <option value="output">Outputs</option>
-            <option value="manager_decision">Manager Decisions</option>
+            <option value="manager_decision">Decisions</option>
+            <option value="telemetry">Telemetry</option>
             <option value="error">Errors</option>
           </select>
         </div>
       </div>
 
       {/* Terminal Body */}
-      <div className="flex-1 p-5 overflow-y-auto space-y-3.5 text-xs select-text">
+      <div className="flex-1 p-5 overflow-y-auto space-y-3 text-xs select-text bg-[#06080d]">
         {filteredLogs.length === 0 ? (
-          <div className="text-slate-600 italic h-full flex items-center justify-center">
-            No live logs received. Start a workspace execution to stream thoughts.
+          <div className="text-slate-600 italic h-full flex items-center justify-center text-xs">
+            No logs matching filter. Launch a task to stream live agent reasoning.
           </div>
         ) : (
           filteredLogs.map((log) => (
-            <div key={log.id} className="border-b border-slate-900/50 pb-2 flex gap-3 items-start hover:bg-slate-900/10 rounded px-1">
-              <span className="text-[10px] text-slate-600 shrink-0 select-none">
+            <div key={log.id} className="border-b border-slate-900/60 pb-2.5 flex gap-3 items-start hover:bg-slate-900/20 rounded-lg px-1.5 transition">
+              <span className="text-[10px] text-slate-600 shrink-0 select-none pt-0.5">
                 {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
               <div className="flex-1 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 bg-slate-900/80 border border-slate-800 ${getLogColor(log.log_type)}`}>
+                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 bg-[#080b12] border border-slate-800 ${getLogColor(log.log_type)}`}>
                     {log.agent_name}
                   </span>
-                  <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wide">
+                  <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider">
                     {log.log_type}
                   </span>
                 </div>
-                <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] ${
-                  log.log_type === "thinking"         ? "text-slate-300"
-                  : log.log_type === "output"         ? "text-slate-200"
-                  : log.log_type === "manager_decision" ? "text-amber-200 bg-amber-950/20 border border-amber-900/30 rounded px-2 py-1.5"
+                <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] font-mono ${
+                  log.log_type === "thinking" ? "text-slate-300"
+                  : log.log_type === "output" ? "text-slate-200"
+                  : log.log_type === "manager_decision" ? "text-amber-200 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2"
                   : getLogColor(log.log_type)
                 }`}>
                   {getLogIcon(log.log_type)}
@@ -122,11 +157,10 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
           ))
         )}
         <div ref={terminalEndRef} />
-        {/* Blinking cursor while stream is active */}
         {isStreaming && (
-          <div className="flex items-center gap-2 pt-1 pb-2">
+          <div className="flex items-center gap-2 pt-1 pb-1">
             <span className="text-[10px] text-slate-600 select-none">—</span>
-            <span className="w-2 h-3.5 bg-blue-500/70 rounded-sm animate-pulse" />
+            <span className="w-2 h-3.5 bg-sky-400 rounded-sm animate-pulse" />
           </div>
         )}
       </div>

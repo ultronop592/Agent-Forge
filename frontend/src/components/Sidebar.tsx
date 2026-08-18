@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { 
   LayoutDashboard, 
-  MessageSquare, 
+  Layers, 
   BrainCircuit, 
   Cpu, 
   PocketKnife, 
-  Radio,
-  History
+  Sparkles,
+  History,
+  Activity,
+  Bot
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -19,14 +21,13 @@ const HEALTH_URL = API_BASE_URL.endsWith("/api")
   ? API_BASE_URL.slice(0, -4) + "/health"
   : API_BASE_URL + "/health";
 
-
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Workspace", href: "/chat", icon: MessageSquare },
-  { label: "Launch History", href: "/recent", icon: History },
-  { label: "Memory Bank", href: "/memory", icon: BrainCircuit },
-  { label: "MCP Servers", href: "/mcp", icon: Cpu },
-  { label: "Plugins", href: "/plugins", icon: PocketKnife },
+  { label: "Dashboard", href: "/", icon: LayoutDashboard, badge: null },
+  { label: "AI Workspace", href: "/chat", icon: Layers, badge: "Live" },
+  { label: "Launch History", href: "/recent", icon: History, badge: null },
+  { label: "Memory Bank", href: "/memory", icon: BrainCircuit, badge: null },
+  { label: "MCP Control", href: "/mcp", icon: Cpu, badge: "JSON-RPC" },
+  { label: "Workforce Plugins", href: "/plugins", icon: PocketKnife, badge: null },
 ];
 
 export default function Sidebar() {
@@ -52,24 +53,32 @@ export default function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-64 border-r border-slate-800/80 bg-slate-950/80 backdrop-blur-xl flex flex-col h-screen sticky top-0 shrink-0">
+    <aside className="w-64 border-r border-slate-800/80 bg-[#0a0e17]/95 backdrop-blur-2xl flex flex-col h-screen sticky top-0 shrink-0 select-none z-20">
       {/* Brand Logo Header */}
-      <div className="p-6 border-b border-slate-800/50 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center glow-primary">
-          <Radio className="w-5 h-5 text-white animate-pulse" />
-        </div>
-        <div>
-          <h1 className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 leading-none">
-            AgentForge
-          </h1>
-          <span className="text-[10px] text-slate-500 font-medium tracking-widest uppercase">
-            Workforce v1.0
-          </span>
-        </div>
+      <div className="p-5 border-b border-slate-800/60 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 group-hover:scale-105 transition-transform">
+            <Bot className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-bold text-base text-white tracking-tight leading-none">
+                AgentForge
+              </h1>
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping" />
+            </div>
+            <span className="text-[10px] font-semibold text-sky-400/90 tracking-wider uppercase block mt-1">
+              Autonomous Workforce
+            </span>
+          </div>
+        </Link>
       </div>
 
-      {/* Navigation list */}
-      <nav className="flex-1 px-4 py-6 space-y-1.5">
+      {/* Navigation List */}
+      <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
+        <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          Navigation
+        </div>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -77,33 +86,64 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${
                 isActive
-                  ? "bg-blue-600/10 border-l-2 border-blue-500 text-blue-400"
-                  : "text-slate-400 hover:text-white hover:bg-slate-900/60"
+                  ? "bg-sky-500/10 text-white border border-sky-500/30 shadow-sm shadow-sky-500/10"
+                  : "text-slate-400 hover:text-white hover:bg-slate-900/60 border border-transparent"
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? "text-blue-400" : "text-slate-400 group-hover:text-white"}`} />
-              {item.label}
+              <div className="flex items-center gap-3">
+                <div className={`p-1 rounded-lg transition-colors ${
+                  isActive 
+                    ? "bg-sky-500/20 text-sky-400" 
+                    : "text-slate-400 group-hover:text-sky-400 group-hover:bg-slate-800/50"
+                }`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <span>{item.label}</span>
+              </div>
+
+              {item.badge && (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                  isActive
+                    ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                    : "bg-slate-800 text-slate-400 group-hover:text-slate-300"
+                }`}>
+                  {item.badge}
+                </span>
+              )}
+
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-sky-400 shadow-sm shadow-sky-400" />
+              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* Health status footer */}
-      <div className="p-5 border-t border-slate-800/50 flex items-center justify-between text-xs text-slate-500 font-medium">
-        <span>System Core API</span>
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              apiStatus === "healthy"
-                ? "bg-emerald-500 pulse-emerald"
-                : apiStatus === "connecting"
-                ? "bg-amber-500 animate-pulse"
-                : "bg-rose-500"
-            }`}
-          />
-          <span className="capitalize">{apiStatus}</span>
+      {/* Health Status Footer */}
+      <div className="p-4 border-t border-slate-800/60 bg-slate-950/40">
+        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-[11px] font-medium text-slate-300">System Core API</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                apiStatus === "healthy"
+                  ? "bg-emerald-400 pulse-emerald"
+                  : apiStatus === "connecting"
+                  ? "bg-amber-400 animate-pulse"
+                  : "bg-rose-500"
+              }`}
+            />
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${
+              apiStatus === "healthy" ? "text-emerald-400" : apiStatus === "connecting" ? "text-amber-400" : "text-rose-400"
+            }`}>
+              {apiStatus}
+            </span>
+          </div>
         </div>
       </div>
     </aside>
