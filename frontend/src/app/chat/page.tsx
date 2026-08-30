@@ -449,6 +449,34 @@ function WorkspaceInner() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Mode Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                    Objective Intent / Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: "code", label: "💻 Write Code", plugin: "software_debugging", prompt: "Implement a thread-safe Redis token bucket rate limiter in Python adhering to SOLID design principles." },
+                      { id: "research", label: "🔍 Web Research", plugin: "startup_research", prompt: "Search and aggregate AI Developer job openings posted today in India with salary estimates and direct URLs." },
+                      { id: "architecture", label: "🧠 Architecture", plugin: "software_debugging", prompt: "Design an event-driven microservices architecture with idempotency and audit logs." },
+                      { id: "qa", label: "🛡️ Fact-Check QA", plugin: "startup_research", prompt: "Perform a factual compliance and security audit on OAuth2 PKCE flows." }
+                    ].map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => {
+                          const match = plugins.find(p => p.plugin_id === mode.plugin);
+                          if (match) setSelectedPlugin(match.plugin_id);
+                          setPrompt(mode.prompt);
+                        }}
+                        className="p-2 rounded-xl bg-[#121214] border border-zinc-800 hover:border-[#da7756]/50 text-left text-xs font-semibold text-zinc-300 hover:text-white transition cursor-pointer"
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
                     1. Target Plugin Workflow
@@ -474,7 +502,7 @@ function WorkspaceInner() {
                     2. Objective Description
                   </label>
                   <textarea 
-                    rows={6}
+                    rows={5}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Provide specific objectives for the workforce. E.g. 'Search and aggregate today's AI developer jobs in India' or 'Build a Python token bucket rate limiter'..."
