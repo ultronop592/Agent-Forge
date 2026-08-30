@@ -171,9 +171,20 @@ export default function Dashboard() {
           to <span className="text-[#da7756]">build or solve?</span>
         </h1>
 
-        <p className="text-zinc-400 text-sm max-w-xl mx-auto leading-relaxed">
-          Deploy specialized AI agents that collaboratively plan, research live web data, write software, and verify factual deliverables.
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-400 max-w-2xl mx-auto pt-1 font-medium">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#da7756]" />
+            Multi-agent collaborative planning, research & code synthesis
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#da7756]" />
+            Real-time live web grounding with zero hallucinated links
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Automated LLM-as-a-Judge QA verification (95%+ accuracy)
+          </span>
+        </div>
       </div>
 
       {/* 2. Interactive Objective Modes + Central Dispatcher */}
