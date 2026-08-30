@@ -51,22 +51,19 @@ export default function DeleteConfirmModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity duration-300 animate-in fade-in"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-200"
         onClick={() => {
           if (!isLoading) onClose();
         }}
       />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800/90 rounded-2xl p-6 shadow-2xl shadow-rose-950/20 z-10 transition-all duration-300 animate-in zoom-in-95 scale-100">
-        {/* Glow ambient highlight */}
-        <div className="absolute top-0 right-1/2 translate-x-1/2 -translate-y-1/2 w-48 h-20 bg-rose-600/15 rounded-full blur-2xl pointer-events-none" />
-
+      <div className="relative w-full max-w-md bg-[#18181b] border border-zinc-800 rounded-2xl p-6 shadow-2xl z-10 transition-all duration-200">
         {/* Close icon */}
         <button
           onClick={onClose}
           disabled={isLoading}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800/60 transition disabled:opacity-40"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition disabled:opacity-40 cursor-pointer"
           aria-label="Close dialog"
         >
           <X className="w-4 h-4" />
@@ -74,14 +71,14 @@ export default function DeleteConfirmModal({
 
         {/* Content Header */}
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 shadow-inner">
-            <Trash2 className="w-6 h-6 animate-pulse" />
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+            <Trash2 className="w-5 h-5" />
           </div>
           <div className="space-y-1 pt-0.5">
-            <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+            <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
               <span>{title}</span>
             </h3>
-            <p className="text-xs text-slate-400 leading-relaxed font-normal">
+            <p className="text-xs text-zinc-400 leading-relaxed font-normal">
               {description}
             </p>
           </div>
@@ -89,17 +86,17 @@ export default function DeleteConfirmModal({
 
         {/* Item preview badge if provided */}
         {(itemLabel || itemSubLabel) && (
-          <div className="my-4 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800/80 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
+          <div className="my-4 p-3.5 rounded-xl bg-[#121214] border border-zinc-800 space-y-1">
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">
               Target for Deletion
             </span>
             {itemLabel && (
-              <p className="text-xs font-semibold text-slate-200 line-clamp-2 select-text font-mono">
+              <p className="text-xs font-semibold text-zinc-200 line-clamp-2 select-text font-mono">
                 {itemLabel}
               </p>
             )}
             {itemSubLabel && (
-              <p className="text-[11px] text-slate-400 truncate font-mono">
+              <p className="text-[11px] text-zinc-400 truncate font-mono">
                 {itemSubLabel}
               </p>
             )}
@@ -116,7 +113,7 @@ export default function DeleteConfirmModal({
 
         {/* Error message display if any */}
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/80 border border-red-700/50 text-red-300 text-xs select-text">
+          <div className="mb-4 p-3 rounded-xl bg-rose-950/80 border border-rose-800/50 text-rose-300 text-xs select-text">
             <strong>Error: </strong> {errorMessage}
           </div>
         )}
@@ -127,7 +124,7 @@ export default function DeleteConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
           >
             {cancelText}
           </button>
@@ -135,7 +132,7 @@ export default function DeleteConfirmModal({
             type="button"
             onClick={() => onConfirm()}
             disabled={isLoading}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-semibold shadow-lg shadow-rose-950/50 flex items-center gap-2 transition disabled:opacity-60 cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-2 transition disabled:opacity-60 cursor-pointer"
           >
             {isLoading ? (
               <>

@@ -210,7 +210,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-10 w-full relative z-10">
+    <div className="p-8 max-w-7xl mx-auto space-y-10 w-full relative z-10 bg-[#121214] text-[#f4f4f5]">
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={!!taskToDelete}
@@ -236,37 +236,37 @@ export default function Dashboard() {
         {/* What is AgentForge? Explanation */}
         <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0e1726] border border-sky-500/30 text-sky-400 text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#da7756]/10 border border-[#da7756]/30 text-[#da7756] text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Autonomous AI Workforce Platform</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
               Collaborative AI Agents for <br />
-              <span className="text-sky-400">Complex, Real-World Objectives</span>
+              <span className="text-[#da7756]">Complex, Real-World Objectives</span>
             </h1>
 
-            <p className="text-slate-300 text-sm leading-relaxed max-w-2xl">
+            <p className="text-zinc-300 text-sm leading-relaxed max-w-2xl">
               <strong>AgentForge</strong> is an autonomous multi-agent orchestration platform. Instead of a single generic chatbot, AgentForge deploys a specialized team of AI agents that collaboratively plan, research live web data, write software, synthesize reports, and rigorously fact-check every output before delivery.
             </p>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="p-3.5 rounded-xl bg-[#0c101a] border border-slate-800 space-y-1">
-                <div className="flex items-center gap-2 text-sky-400 text-xs font-bold">
-                  <CheckCircle className="w-3.5 h-3.5 text-sky-400" />
+              <div className="p-3.5 rounded-xl bg-[#18181b] border border-zinc-800 space-y-1">
+                <div className="flex items-center gap-2 text-[#da7756] text-xs font-bold">
+                  <CheckCircle className="w-3.5 h-3.5 text-[#da7756]" />
                   <span>Real Live Search Grounding</span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-normal">
+                <p className="text-[11px] text-zinc-400 leading-normal">
                   Crawls live sources with automatic verification — no fabricated links.
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#0c101a] border border-slate-800 space-y-1">
-                <div className="flex items-center gap-2 text-sky-400 text-xs font-bold">
-                  <CheckCircle className="w-3.5 h-3.5 text-sky-400" />
+              <div className="p-3.5 rounded-xl bg-[#18181b] border border-zinc-800 space-y-1">
+                <div className="flex items-center gap-2 text-[#da7756] text-xs font-bold">
+                  <CheckCircle className="w-3.5 h-3.5 text-[#da7756]" />
                   <span>LLM-as-Judge QA Gates</span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-normal">
+                <p className="text-[11px] text-zinc-400 leading-normal">
                   Automated verification scores faithfulness and technical quality.
                 </p>
               </div>
@@ -275,7 +275,7 @@ export default function Dashboard() {
 
           {/* Quick Preset Buttons */}
           <div className="space-y-2 pt-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
               Try A Sample Objective:
             </span>
             <div className="flex flex-wrap gap-2">
@@ -284,7 +284,7 @@ export default function Dashboard() {
                   key={idx}
                   type="button"
                   onClick={() => setPrompt(preset.prompt)}
-                  className="px-3 py-1.5 rounded-lg bg-[#0c101a] border border-slate-800 text-slate-300 hover:text-white hover:border-sky-500/50 text-xs font-medium transition cursor-pointer text-left"
+                  className="px-3 py-1.5 rounded-lg bg-[#18181b] border border-zinc-800 text-zinc-300 hover:text-white hover:border-[#da7756]/50 text-xs font-medium transition cursor-pointer text-left"
                 >
                   💡 {preset.label}
                 </button>
@@ -295,22 +295,22 @@ export default function Dashboard() {
 
         {/* Clean, Minimal Goal Dispatcher Card */}
         <div className="lg:col-span-5">
-          <form onSubmit={handleLaunch} className="glass-panel rounded-2xl p-6 flex flex-col justify-between h-full space-y-5 border border-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+          <form onSubmit={handleLaunch} className="glass-panel rounded-2xl p-6 flex flex-col justify-between h-full space-y-5 border border-zinc-800 bg-[#18181b]">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-[#da7756]/15 border border-[#da7756]/30 text-[#da7756] flex items-center justify-center">
                   <Rocket className="w-4 h-4" />
                 </div>
                 <h3 className="font-bold text-sm text-white">Deploy AI Workforce</h3>
               </div>
-              <span className="text-[10px] font-semibold text-slate-400 bg-[#080b11] border border-slate-800 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-semibold text-zinc-400 bg-[#121214] border border-zinc-800 px-2 py-0.5 rounded">
                 HITL Enabled
               </span>
             </div>
 
             <div className="space-y-4 flex-1">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
                   Target Goal / Task Description
                 </label>
                 <textarea
@@ -318,18 +318,18 @@ export default function Dashboard() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe what you want the workforce to accomplish (e.g. 'Search and aggregate today's AI developer jobs in India' or 'Build a rate limiter in Python')..."
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl p-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500/60 transition resize-none leading-relaxed"
+                  className="w-full bg-[#121214] border border-zinc-800 rounded-xl p-3.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#da7756]/70 transition resize-none leading-relaxed"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
                   Workflow Orchestration Blueprint
                 </label>
                 <select
                   value={selectedPlugin}
                   onChange={(e) => setSelectedPlugin(e.target.value)}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500/60 transition cursor-pointer"
+                  className="w-full bg-[#121214] border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-zinc-200 focus:outline-none focus:border-[#da7756]/70 transition cursor-pointer"
                 >
                   {plugins.map((p) => (
                     <option key={p.plugin_id} value={p.plugin_id}>
@@ -340,20 +340,20 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Clean Minimal Button - No Glow */}
+            {/* Clean Minimal Button - Claude Orange & No Glow */}
             <button
               type="submit"
               disabled={isSubmitting || !prompt.trim()}
-              className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-40 transition-colors cursor-pointer"
+              className="w-full py-3 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-white font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-40 transition-colors cursor-pointer"
             >
               {isSubmitting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Planning Workforce Subtasks...</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-3.5 h-3.5 fill-slate-950" />
+                  <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Deploy Autonomous Workforce</span>
                 </>
               )}
@@ -366,10 +366,10 @@ export default function Dashboard() {
       <div className="space-y-4 pt-2">
         <div>
           <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-            <Compass className="w-4 h-4 text-sky-400" />
+            <Compass className="w-4 h-4 text-[#da7756]" />
             <span>How The AgentForge Workforce Operates</span>
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-zinc-400">
             A deterministic, sequential multi-agent pipeline from raw prompt to verified deliverable.
           </p>
         </div>
@@ -378,18 +378,18 @@ export default function Dashboard() {
           {ARCHITECTURE_STEPS.map((item, idx) => {
             const Icon = item.icon;
             return (
-              <div key={idx} className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-3 relative overflow-hidden">
+              <div key={idx} className="glass-panel rounded-2xl p-5 border border-zinc-800 space-y-3 relative overflow-hidden bg-[#18181b]">
                 <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-[#da7756]/15 border border-[#da7756]/20 text-[#da7756] flex items-center justify-center">
                     <Icon className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-500">{item.step}</span>
+                  <span className="text-xs font-mono font-bold text-zinc-500">{item.step}</span>
                 </div>
 
                 <div className="space-y-1">
                   <h3 className="text-xs font-bold text-white">{item.title}</h3>
-                  <span className="text-[10px] font-semibold text-sky-400 block">{item.agent}</span>
-                  <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                  <span className="text-[10px] font-semibold text-[#da7756] block">{item.agent}</span>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed pt-1">
                     {item.description}
                   </p>
                 </div>
@@ -402,23 +402,23 @@ export default function Dashboard() {
       {/* 3. Live Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Tasks Orchestrated", val: stats.totalTasks, icon: Layers, color: "text-sky-400" },
-          { label: "Active Capabilities / Tools", val: stats.activeTools, icon: Cpu, color: "text-sky-400" },
-          { label: "Semantic Memories Recalled", val: stats.memories, icon: BrainCircuit, color: "text-sky-400" },
+          { label: "Total Tasks Orchestrated", val: stats.totalTasks, icon: Layers, color: "text-[#da7756]" },
+          { label: "Active Capabilities / Tools", val: stats.activeTools, icon: Cpu, color: "text-[#da7756]" },
+          { label: "Semantic Memories Recalled", val: stats.memories, icon: BrainCircuit, color: "text-[#da7756]" },
           { label: "QA Confidence Rating", val: stats.avgConfidence, icon: ShieldCheck, color: "text-emerald-400" },
         ].map((item, idx) => {
           const Icon = item.icon;
           return (
-            <div key={idx} className="glass-panel rounded-2xl p-5 border border-slate-800 flex items-center justify-between">
+            <div key={idx} className="glass-panel rounded-2xl p-5 border border-zinc-800 flex items-center justify-between bg-[#18181b]">
               <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">
                   {item.label}
                 </span>
                 <h4 className="text-2xl font-extrabold text-white tracking-tight">
                   {item.val}
                 </h4>
               </div>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center border border-slate-800 bg-[#080b11]">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 bg-[#121214]">
                 <Icon className={`w-4 h-4 ${item.color}`} />
               </div>
             </div>
@@ -433,11 +433,11 @@ export default function Dashboard() {
             <h2 className="text-base font-bold text-white tracking-tight">
               Autonomous Agent Workforce Roster
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-zinc-400">
               Specialized LLM agent nodes configured with tool capabilities, token budgets, and verification gates.
             </p>
           </div>
-          <span className="text-[11px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-lg">
+          <span className="text-[11px] font-semibold text-[#da7756] bg-[#da7756]/10 border border-[#da7756]/20 px-2.5 py-1 rounded-lg">
             {agents.length} Active Nodes
           </span>
         </div>
@@ -445,7 +445,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? (
             Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-2xl bg-[#0c101a] border border-slate-800 animate-pulse" />
+              <div key={i} className="h-40 rounded-2xl bg-[#18181b] border border-zinc-800 animate-pulse" />
             ))
           ) : (
             agents.map((agent) => (
@@ -456,27 +456,27 @@ export default function Dashboard() {
       </div>
 
       {/* 5. Recent Deployments Table */}
-      <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="glass-panel rounded-2xl p-6 border border-zinc-800 space-y-4 bg-[#18181b]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
           <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-sky-400" />
+            <History className="w-4 h-4 text-[#da7756]" />
             <h3 className="font-bold text-sm text-white">Recent Workforce Launches</h3>
           </div>
           
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
               <input
                 type="text"
                 placeholder="Filter recent runs..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                className="bg-[#07090e] border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/60 w-48 sm:w-64"
+                className="bg-[#121214] border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#da7756]/60 w-48 sm:w-64"
               />
             </div>
             <Link
               href="/recent"
-              className="text-xs font-semibold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 shrink-0"
+              className="text-xs font-semibold text-[#da7756] hover:text-[#e08569] hover:underline flex items-center gap-1 shrink-0"
             >
               <span>View Audit Trail</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -485,14 +485,14 @@ export default function Dashboard() {
         </div>
 
         {tasks.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-xs italic">
+          <div className="text-center py-12 text-zinc-500 text-xs italic">
             No workspaces launched yet. Enter an objective above to start your first run.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-zinc-800 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                   <th className="pb-3 pl-2">Objective / Prompt</th>
                   <th className="pb-3">Blueprint</th>
                   <th className="pb-3">Status</th>
@@ -500,13 +500,13 @@ export default function Dashboard() {
                   <th className="pb-3 text-right pr-2">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-zinc-800/60">
                 {filteredTasks.slice(0, 5).map((t) => (
-                  <tr key={t.id} className="hover:bg-[#0f1422] transition">
-                    <td className="py-3 pl-2 font-medium text-slate-200 max-w-md truncate" title={t.prompt}>
+                  <tr key={t.id} className="hover:bg-zinc-800/40 transition">
+                    <td className="py-3 pl-2 font-medium text-zinc-200 max-w-md truncate" title={t.prompt}>
                       {t.prompt}
                     </td>
-                    <td className="py-3 text-slate-400 font-mono text-[11px]">
+                    <td className="py-3 text-zinc-400 font-mono text-[11px]">
                       {t.plugin_name}
                     </td>
                     <td className="py-3">
@@ -514,29 +514,29 @@ export default function Dashboard() {
                         t.status === "completed"
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : t.status === "running"
-                          ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                          ? "bg-[#da7756]/10 text-[#da7756] border-[#da7756]/20"
                           : t.status === "failed"
                           ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                          : "bg-slate-900 text-slate-500 border-slate-800"
+                          : "bg-zinc-900 text-zinc-500 border-zinc-800"
                       }`}>
                         {t.status}
                       </span>
                     </td>
-                    <td className="py-3 text-slate-400 text-[11px]">
+                    <td className="py-3 text-zinc-400 text-[11px]">
                       {new Date(t.created_at).toLocaleDateString()} {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="py-3 text-right pr-2">
                       <div className="flex items-center justify-end gap-3">
                         <Link
                           href={`/chat?task_id=${t.id}`}
-                          className="text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1"
+                          className="text-[#da7756] hover:text-[#e08569] font-semibold inline-flex items-center gap-1"
                         >
                           <span>Inspect</span>
                           <ArrowRight className="w-3 h-3" />
                         </Link>
                         <button
                           onClick={(e) => handleRequestDelete(t, e)}
-                          className="text-slate-500 hover:text-rose-400 p-1 hover:bg-rose-500/10 rounded transition cursor-pointer"
+                          className="text-zinc-500 hover:text-rose-400 p-1 hover:bg-rose-500/10 rounded transition cursor-pointer"
                           title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
