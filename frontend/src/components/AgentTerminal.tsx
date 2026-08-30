@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Terminal, ShieldAlert, CheckCircle, Info, ExternalLink, Copy, Check, Filter } from "lucide-react";
+import { Terminal, ShieldAlert, CheckCircle, Info, ExternalLink, Copy, Check } from "lucide-react";
 
 interface LogEntry {
   id: number;
@@ -34,19 +34,19 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
 
   const getLogColor = (type: string) => {
     switch (type) {
-      case "thinking":         return "text-sky-300";
+      case "thinking":         return "text-[#e08569]";
       case "tool_call":        return "text-amber-300";
       case "output":           return "text-emerald-300";
       case "error":            return "text-rose-400 font-semibold";
       case "manager_decision": return "text-amber-200 font-semibold";
-      case "telemetry":        return "text-indigo-300";
-      default: return "text-slate-300";
+      case "telemetry":        return "text-zinc-400";
+      default: return "text-zinc-300";
     }
   };
 
   const getLogIcon = (type: string) => {
     switch (type) {
-      case "thinking":         return <Info className="w-3.5 h-3.5 inline mr-1.5 text-sky-400 shrink-0" />;
+      case "thinking":         return <Info className="w-3.5 h-3.5 inline mr-1.5 text-[#da7756] shrink-0" />;
       case "tool_call":        return <ExternalLink className="w-3.5 h-3.5 inline mr-1.5 text-amber-400 shrink-0" />;
       case "output":           return <CheckCircle className="w-3.5 h-3.5 inline mr-1.5 text-emerald-400 shrink-0" />;
       case "error":            return <ShieldAlert className="w-3.5 h-3.5 inline mr-1.5 text-rose-400 shrink-0" />;
@@ -63,23 +63,23 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
   };
 
   return (
-    <div className="bg-[#06080d] border border-slate-800 rounded-2xl flex flex-col h-full overflow-hidden font-mono shadow-2xl">
+    <div className="bg-[#121214] border border-zinc-800 rounded-2xl flex flex-col h-full overflow-hidden font-mono">
       {/* Terminal Title Bar */}
-      <div className="bg-[#090d16] px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+      <div className="bg-[#161619] px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
           </div>
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-            <Terminal className="w-4 h-4 text-sky-400" />
+          <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
+            <Terminal className="w-4 h-4 text-[#da7756]" />
             <span className="text-xs text-white font-bold uppercase tracking-wider">
               Thinking & Execution Console
             </span>
             {isStreaming && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
                 LIVE STREAM
               </span>
             )}
@@ -90,7 +90,7 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
         <div className="flex items-center gap-2.5">
           <button
             onClick={copyLogs}
-            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
             title="Copy all logs"
           >
             {copied ? (
@@ -109,7 +109,7 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
           <select 
             value={filter} 
             onChange={(e) => setFilter(e.target.value)}
-            className="bg-[#05070c] border border-slate-800 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 font-semibold focus:outline-none focus:border-sky-500/50 cursor-pointer"
+            className="bg-[#121214] border border-zinc-800 rounded-lg px-2.5 py-1 text-[10px] text-zinc-300 font-semibold focus:outline-none focus:border-[#da7756]/50 cursor-pointer"
           >
             <option value="all">All Channels ({logs.length})</option>
             <option value="thinking">Thinking Logs</option>
@@ -123,29 +123,29 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
       </div>
 
       {/* Terminal Body */}
-      <div className="flex-1 p-5 overflow-y-auto space-y-3 text-xs select-text bg-[#06080d]">
+      <div className="flex-1 p-5 overflow-y-auto space-y-3 text-xs select-text bg-[#121214]">
         {filteredLogs.length === 0 ? (
-          <div className="text-slate-600 italic h-full flex items-center justify-center text-xs">
+          <div className="text-zinc-500 italic h-full flex items-center justify-center text-xs">
             No logs matching filter. Launch a task to stream live agent reasoning.
           </div>
         ) : (
           filteredLogs.map((log) => (
-            <div key={log.id} className="border-b border-slate-900/60 pb-2.5 flex gap-3 items-start hover:bg-slate-900/20 rounded-lg px-1.5 transition">
-              <span className="text-[10px] text-slate-600 shrink-0 select-none pt-0.5">
+            <div key={log.id} className="border-b border-zinc-800/60 pb-2.5 flex gap-3 items-start hover:bg-zinc-800/30 rounded-lg px-1.5 transition">
+              <span className="text-[10px] text-zinc-500 shrink-0 select-none pt-0.5">
                 {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
               <div className="flex-1 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 bg-[#080b12] border border-slate-800 ${getLogColor(log.log_type)}`}>
+                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 bg-[#18181b] border border-zinc-800 ${getLogColor(log.log_type)}`}>
                     {log.agent_name}
                   </span>
-                  <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider">
+                  <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">
                     {log.log_type}
                   </span>
                 </div>
                 <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] font-mono ${
-                  log.log_type === "thinking" ? "text-slate-300"
-                  : log.log_type === "output" ? "text-slate-200"
+                  log.log_type === "thinking" ? "text-zinc-300"
+                  : log.log_type === "output" ? "text-zinc-200"
                   : log.log_type === "manager_decision" ? "text-amber-200 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2"
                   : getLogColor(log.log_type)
                 }`}>
@@ -159,8 +159,8 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
         <div ref={terminalEndRef} />
         {isStreaming && (
           <div className="flex items-center gap-2 pt-1 pb-1">
-            <span className="text-[10px] text-slate-600 select-none">—</span>
-            <span className="w-2 h-3.5 bg-sky-400 rounded-sm animate-pulse" />
+            <span className="text-[10px] text-zinc-500 select-none">—</span>
+            <span className="w-2 h-3.5 bg-[#da7756] rounded-sm" />
           </div>
         )}
       </div>

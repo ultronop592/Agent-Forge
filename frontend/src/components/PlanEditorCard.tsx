@@ -9,8 +9,7 @@ import {
   ArrowUp, 
   ArrowDown, 
   Layers,
-  Clock,
-  Sparkles
+  Clock
 } from "lucide-react";
 
 export interface EditableSubtask {
@@ -135,28 +134,28 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
   };
 
   return (
-    <div className="glass-panel-elevated rounded-2xl p-6 space-y-5 border border-sky-500/30 shadow-2xl relative overflow-hidden">
+    <div className="glass-panel-elevated rounded-2xl p-6 space-y-5 border border-[#da7756]/30 bg-[#1e1e24] relative overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl bg-[#da7756]/20 text-[#da7756] flex items-center justify-center">
             <Layers className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <span>Human-in-the-Loop: Plan Review & Edit Gate</span>
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-[#da7756]" />
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-zinc-400">
               Review, re-order, modify agent assignments, or add custom subtask steps before execution begins.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl shrink-0">
-          <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-          <span className="text-[11px] font-semibold text-slate-300">
-            Auto-proceeds in: <strong className="text-amber-400 font-mono">{secondsLeft}s</strong>
+        <div className="flex items-center gap-2 bg-[#141416] border border-zinc-800 px-3 py-1.5 rounded-xl shrink-0">
+          <Clock className="w-3.5 h-3.5 text-[#da7756]" />
+          <span className="text-[11px] font-semibold text-zinc-300">
+            Auto-proceeds in: <strong className="text-[#da7756] font-mono">{secondsLeft}s</strong>
           </span>
         </div>
       </div>
@@ -166,17 +165,17 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
         {subtasks.map((subtask, index) => (
           <div
             key={subtask.id || `subtask-${index}`}
-            className="p-4 rounded-xl bg-[#080b12] border border-slate-800/90 hover:border-slate-700 transition space-y-3"
+            className="p-4 rounded-xl bg-[#141416] border border-zinc-800 hover:border-zinc-700 transition space-y-3"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md uppercase">
+              <span className="text-[10px] font-bold text-[#da7756] bg-[#da7756]/10 border border-[#da7756]/20 px-2 py-0.5 rounded-md uppercase">
                 Step {index + 1}
               </span>
 
               <select
                 value={subtask.assigned_agent}
                 onChange={(e) => handleAgentChange(index, e.target.value)}
-                className="bg-[#05070c] border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-medium focus:outline-none focus:border-sky-500/50"
+                className="bg-[#121214] border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 font-medium focus:outline-none focus:border-[#da7756]/60"
               >
                 {AGENT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -191,7 +190,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
               value={subtask.title}
               onChange={(e) => handleTitleChange(index, e.target.value)}
               placeholder="Step Title..."
-              className="w-full bg-[#05070c] border border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-sky-500/60"
+              className="w-full bg-[#121214] border border-zinc-800 rounded-lg px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-[#da7756]/60"
             />
 
             <textarea
@@ -199,7 +198,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
               value={subtask.description}
               onChange={(e) => handleDescriptionChange(index, e.target.value)}
               placeholder="Execution description & instructions..."
-              className="w-full bg-[#05070c] border border-slate-800 rounded-lg p-2.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/60 resize-none"
+              className="w-full bg-[#121214] border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-300 focus:outline-none focus:border-[#da7756]/60 resize-none"
             />
 
             <div className="flex items-center justify-end gap-1.5 pt-1">
@@ -207,7 +206,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
                 type="button"
                 onClick={() => handleMoveUp(index)}
                 disabled={index === 0}
-                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
                 title="Move up"
               >
                 <ArrowUp className="w-3.5 h-3.5" />
@@ -216,7 +215,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
                 type="button"
                 onClick={() => handleMoveDown(index)}
                 disabled={index === subtasks.length - 1}
-                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
                 title="Move down"
               >
                 <ArrowDown className="w-3.5 h-3.5" />
@@ -236,11 +235,11 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
       </div>
 
       {/* Primary Actions Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-800">
         <button
           type="button"
           onClick={handleAddSubtask}
-          className="flex items-center gap-2 text-xs font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 border border-sky-500/20 hover:border-sky-500/40 rounded-xl px-4 py-2.5 transition w-full sm:w-auto justify-center cursor-pointer"
+          className="flex items-center gap-2 text-xs font-semibold text-[#da7756] hover:text-[#e08569] bg-[#da7756]/10 border border-[#da7756]/20 hover:border-[#da7756]/40 rounded-xl px-4 py-2.5 transition w-full sm:w-auto justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Custom Step</span>
@@ -251,7 +250,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
             type="button"
             onClick={handleRejectClick}
             disabled={isSubmitting}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
           >
             <XCircle className="w-4 h-4 text-rose-400" />
             <span>Cancel Task</span>
@@ -260,7 +259,7 @@ export default function PlanEditorCard({ initialSubtasks, onApprove, onReject }:
             type="button"
             onClick={handleApproveClick}
             disabled={isSubmitting}
-            className="px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
           >
             <CheckCircle className="w-4 h-4" />
             <span>Approve & Run Plan</span>
