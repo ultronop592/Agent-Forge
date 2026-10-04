@@ -44,6 +44,7 @@ interface LogEntry {
   log_type: string;
   content: string;
   created_at: string;
+  isStreaming?: boolean;
 }
 
 interface Plugin {
@@ -172,8 +173,41 @@ function WorkspaceInner() {
         const { event: eventType, data } = payload;
 
         switch (eventType) {
+          case "token":
+          case "stream_chunk": {
+            const chunk = (data && data.chunk) || payload.chunk || "";
+            const agentName = (data && data.agent_name) || payload.agent_name || "Agent";
+            if (chunk) {
+              setLogs((prev) => {
+                const last = prev[prev.length - 1];
+                if (last && last.isStreaming && last.agent_name === agentName) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...last, content: last.content + chunk }
+                  ];
+                }
+                return [
+                  ...prev,
+                  {
+                    id: Date.now(),
+                    task_id: id,
+                    agent_name: agentName,
+                    log_type: "output",
+                    content: chunk,
+                    created_at: new Date().toISOString(),
+                    isStreaming: true,
+                  }
+                ];
+              });
+            }
+            break;
+          }
+
           case "log":
-            setLogs((prev) => [...prev, data]);
+            setLogs((prev) => {
+              const cleaned = prev.filter(l => !l.isStreaming);
+              return [...cleaned, data];
+            });
             break;
 
           case "status_change":
@@ -222,6 +256,30 @@ function WorkspaceInner() {
           default:
             break;
         }
+
+        // Also process batch update payloads if present
+        if (payload.new_logs && Array.isArray(payload.new_logs) && payload.new_logs.length > 0) {
+          setLogs((prev) => {
+            const cleaned = prev.filter(l => !l.isStreaming);
+            const existingIds = new Set(cleaned.map(l => l.id));
+            const fresh = payload.new_logs.filter((l: any) => !existingIds.has(l.id));
+            return fresh.length > 0 ? [...cleaned, ...fresh] : prev;
+          });
+        }
+        if (payload.status && !eventType) {
+          setTaskStatus(payload.status);
+          if (payload.status === "completed" || payload.status === "failed" || payload.status === "cancelled") {
+            setIsStreaming(false);
+            disconnectStream();
+          }
+        }
+        if (payload.final_result && !eventType) {
+          setFinalResult(payload.final_result);
+        }
+        if (payload.subtasks && !eventType) {
+          setSubtasks(payload.subtasks);
+        }
+
       } catch (err) {
         console.error("SSE parse error:", err);
       }

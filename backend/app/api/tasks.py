@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 from backend.app.core.config import settings
+from backend.app.core.stream import token_stream_manager
 from backend.app.database.connection import get_db, SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
 from backend.app.workflows.orchestrator import orchestrator_graph
@@ -264,87 +265,114 @@ async def stream_task_updates(task_id: str, request: Request = None):
         heartbeat_counter = 0          # fires a ping every ~15s (30 × 0.5s)
         sem = get_sse_db_semaphore()
 
-        while True:
-            # ── Disconnect check: terminate stream if client drops connection ──
-            if request and await request.is_disconnected():
-                break
+        # Subscribe to live token stream
+        token_queue = await token_stream_manager.subscribe(task_id)
 
-            # ── Heartbeat: keep Render proxy from closing idle connections ──
-            heartbeat_counter += 1
-            if heartbeat_counter >= 30:
-                heartbeat_counter = 0
-                yield ": ping\n\n"      # SSE comment — ignored by browser, keeps TCP alive
+        try:
+            while True:
+                # ── Disconnect check: terminate stream if client drops connection ──
+                if request and await request.is_disconnected():
+                    break
 
-            # ── Acquire bounded DB session pool semaphore ───────────────
-            try:
-                async with asyncio.timeout(5.0):
-                    async with sem:
-                        db = SessionLocal()
-                        try:
-                            task = db.query(Task).filter(Task.id == task_id).first()
-                            if not task:
-                                yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
-                                break
+                # ── Drain any queued live token events immediately ─────────
+                tokens_drained = 0
+                while not token_queue.empty() and tokens_drained < 50:
+                    try:
+                        token_evt = token_queue.get_nowait()
+                        tokens_drained += 1
+                        yield f"data: {json.dumps(token_evt)}\n\n"
+                    except asyncio.QueueEmpty:
+                        break
 
-                            # ── Status change detection ──────────────────────────────
-                            status_changed = task.status != last_status
-                            if status_changed:
-                                last_status = task.status
+                # ── Heartbeat: keep Render proxy from closing idle connections ──
+                heartbeat_counter += 1
+                if heartbeat_counter >= 30:
+                    heartbeat_counter = 0
+                    yield ": ping\n\n"      # SSE comment — ignored by browser, keeps TCP alive
 
-                            # ── Subtask change detection ─────────────────────────────
-                            subtasks = (
-                                db.query(Subtask)
-                                .filter(Subtask.task_id == task_id)
-                                .order_by(Subtask.order_index.asc())
-                                .all()
-                            )
-                            subs_updated = False
-                            subs_data = []
-                            for s in subtasks:
-                                subs_data.append(s.to_dict())
-                                if last_subtasks_status.get(s.id) != s.status:
-                                    last_subtasks_status[s.id] = s.status
-                                    subs_updated = True
+                # ── Acquire bounded DB session pool semaphore ───────────────
+                try:
+                    async with asyncio.timeout(5.0):
+                        async with sem:
+                            db = SessionLocal()
+                            try:
+                                task = db.query(Task).filter(Task.id == task_id).first()
+                                if not task:
+                                    yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+                                    break
 
-                            # ── New log lines since last poll ────────────────────────
-                            new_logs = (
-                                db.query(AgentLog)
-                                .filter(AgentLog.task_id == task_id, AgentLog.id > last_log_id)
-                                .order_by(AgentLog.id.asc())
-                                .all()
-                            )
+                                # ── Status change detection ──────────────────────────────
+                                status_changed = task.status != last_status
+                                if status_changed:
+                                    last_status = task.status
 
-                            if new_logs or status_changed or subs_updated:
-                                if new_logs:
-                                    last_log_id = new_logs[-1].id
+                                # ── Subtask change detection ─────────────────────────────
+                                subtasks = (
+                                    db.query(Subtask)
+                                    .filter(Subtask.task_id == task_id)
+                                    .order_by(Subtask.order_index.asc())
+                                    .all()
+                                )
+                                subs_updated = False
+                                subs_data = []
+                                for s in subtasks:
+                                    subs_data.append(s.to_dict())
+                                    if last_subtasks_status.get(s.id) != s.status:
+                                        last_subtasks_status[s.id] = s.status
+                                        subs_updated = True
 
-                                payload = {
-                                    "task_id":      task_id,
-                                    "status":       task.status,
-                                    "final_result": task.final_result,
-                                    "subtasks":     subs_data,
-                                    "new_logs":     [l.to_dict() for l in new_logs],
-                                }
-                                yield f"data: {json.dumps(payload)}\n\n"
+                                # ── New log lines since last poll ────────────────────────
+                                new_logs = (
+                                    db.query(AgentLog)
+                                    .filter(AgentLog.task_id == task_id, AgentLog.id > last_log_id)
+                                    .order_by(AgentLog.id.asc())
+                                    .all()
+                                )
 
-                            # ── Terminal condition ───────────────────────────────────
-                            if task.status in ("completed", "failed", "cancelled"):
-                                # Send one final done event so the client knows cleanly
-                                yield f"data: {json.dumps({'done': True, 'status': task.status})}\n\n"
-                                break
+                                if new_logs or status_changed or subs_updated:
+                                    if new_logs:
+                                        last_log_id = new_logs[-1].id
 
-                        finally:
-                            db.close()
-            except (TimeoutError, asyncio.TimeoutError):
-                # DB pool limit reached; back off briefly and retry on next tick
-                yield f"data: {json.dumps({'warning': 'Database connection pool busy, retrying...'})}\n\n"
-                await asyncio.sleep(1.0)
-                continue
-            except Exception as exc:
-                yield f"data: {json.dumps({'error': str(exc)})}\n\n"
-                break
+                                    payload = {
+                                        "task_id":      task_id,
+                                        "status":       task.status,
+                                        "final_result": task.final_result,
+                                        "subtasks":     subs_data,
+                                        "new_logs":     [l.to_dict() for l in new_logs],
+                                    }
+                                    yield f"data: {json.dumps(payload)}\n\n"
 
-            await asyncio.sleep(0.5)   # 500 ms poll interval
+                                    # Emit discrete SSE events for frontend listeners
+                                    for l in new_logs:
+                                        yield f"data: {json.dumps({'event': 'log', 'data': l.to_dict()})}\n\n"
+                                    if status_changed:
+                                        yield f"data: {json.dumps({'event': 'status_change', 'data': {'status': task.status}})}\n\n"
+
+                                # ── Terminal condition ───────────────────────────────────
+                                if task.status in ("completed", "failed", "cancelled"):
+                                    # Send one final done event so the client knows cleanly
+                                    yield f"data: {json.dumps({'done': True, 'status': task.status})}\n\n"
+                                    break
+
+                            finally:
+                                db.close()
+                except (TimeoutError, asyncio.TimeoutError):
+                    # DB pool limit reached; back off briefly and retry on next tick
+                    yield f"data: {json.dumps({'warning': 'Database connection pool busy, retrying...'})}\n\n"
+                    await asyncio.sleep(1.0)
+                    continue
+                except Exception as exc:
+                    yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+                    break
+
+                # ── Wait for next token or poll interval (0.3s) ───────────────
+                try:
+                    token_evt = await asyncio.wait_for(token_queue.get(), timeout=0.3)
+                    yield f"data: {json.dumps(token_evt)}\n\n"
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            await token_stream_manager.unsubscribe(task_id, token_queue)
 
     # ── Production-safe SSE response headers ────────────────────────────────
     # Cache-Control + X-Accel-Buffering prevent nginx/CDN from buffering the stream.
@@ -359,3 +387,4 @@ async def stream_task_updates(task_id: str, request: Request = None):
         media_type="text/event-stream",
         headers=headers,
     )
+

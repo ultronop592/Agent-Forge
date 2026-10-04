@@ -10,6 +10,7 @@ from google import genai
 from google.genai import types
 from backend.app.core.config import settings
 from backend.app.core.telemetry import calculate_cost, agent_traceable
+from backend.app.core.stream import token_stream_manager
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import AgentLog
 
@@ -86,6 +87,32 @@ class BaseAgent:
         finally:
             db.close()
 
+    async def _stream_content(self, prompt: str, config: types.GenerateContentConfig):
+        """
+        Stream chunks using generate_content_stream.
+        Prefers asynchronous client.aio stream when available, falling back to
+        synchronous client.models stream in a dedicated executor thread.
+        """
+        if hasattr(self.client, "aio") and hasattr(self.client.aio, "models") and hasattr(self.client.aio.models, "generate_content_stream"):
+            response_stream = await self.client.aio.models.generate_content_stream(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=config
+            )
+            async for chunk in response_stream:
+                yield chunk
+        else:
+            loop = asyncio.get_running_loop()
+            def get_sync_stream():
+                return self.client.models.generate_content_stream(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=config
+                )
+            sync_stream = await loop.run_in_executor(_LLM_EXECUTOR, get_sync_stream)
+            for chunk in sync_stream:
+                yield chunk
+
     @agent_traceable(name="Agent_LLM_Execution", run_type="llm")
     async def execute_llm(
         self,
@@ -103,7 +130,6 @@ class BaseAgent:
         if not self.has_llm:
             # Generate or return mock response
             self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is running in DEMO mode.")
-            await asyncio.sleep(0.3)  # Simulate network time
             
             if response_schema and mock_response_content:
                 try:
@@ -113,6 +139,19 @@ class BaseAgent:
                     logger.error(f"Mock content failed validation: {e}")
             
             res_content = mock_response_content or "Demo result from " + self.name
+
+            # Stream words token-by-token for responsive visual feedback
+            words = res_content.split(" ")
+            for i, word in enumerate(words):
+                chunk = word + (" " if i < len(words) - 1 else "")
+                await token_stream_manager.publish_token(
+                    task_id=task_id,
+                    agent_name=self.name,
+                    chunk=chunk,
+                    subtask_id=subtask_id
+                )
+                await asyncio.sleep(0.01)
+
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
             
             # Estimate tokens for offline/demo telemetry
@@ -145,27 +184,33 @@ class BaseAgent:
                 **config_params
             )
 
-            loop = asyncio.get_running_loop()
             max_retries = 3
             
             for attempt in range(max_retries + 1):
                 try:
-                    def call_api():
-                        return self.client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=prompt,
-                            config=config
-                        )
-                        
-                    response = await loop.run_in_executor(_LLM_EXECUTOR, call_api)
-                    result_text = response.text or ""
+                    collected_chunks: List[str] = []
+                    usage_metadata = None
+
+                    async for chunk in self._stream_content(prompt, config):
+                        txt = getattr(chunk, "text", "") or ""
+                        if txt:
+                            collected_chunks.append(txt)
+                            await token_stream_manager.publish_token(
+                                task_id=task_id,
+                                agent_name=self.name,
+                                chunk=txt,
+                                subtask_id=subtask_id
+                            )
+                        if getattr(chunk, "usage_metadata", None):
+                            usage_metadata = chunk.usage_metadata
+
+                    result_text = "".join(collected_chunks)
                     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
                     # Extract usage metadata & token metrics
-                    usage = getattr(response, "usage_metadata", None)
-                    prompt_tokens = getattr(usage, "prompt_token_count", None)
-                    completion_tokens = getattr(usage, "candidates_token_count", None)
-                    total_tokens = getattr(usage, "total_token_count", None)
+                    prompt_tokens = getattr(usage_metadata, "prompt_token_count", None) if usage_metadata else None
+                    completion_tokens = getattr(usage_metadata, "candidates_token_count", None) if usage_metadata else None
+                    total_tokens = getattr(usage_metadata, "total_token_count", None) if usage_metadata else None
 
                     if prompt_tokens is None:
                         prompt_tokens = int(len(prompt.split()) * 1.3)
@@ -221,3 +266,4 @@ class BaseAgent:
                 self.log_db(task_id, subtask_id, "thinking", "Falling back to demo content due to API failure.")
                 return mock_response_content
             raise e
+

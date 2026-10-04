@@ -12,6 +12,7 @@ interface LogEntry {
   log_type: string;
   content: string;
   created_at: string;
+  isStreaming?: boolean;
 }
 
 interface AgentTerminalProps {

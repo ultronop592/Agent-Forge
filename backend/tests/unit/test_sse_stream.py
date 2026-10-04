@@ -166,3 +166,102 @@ async def test_sse_stream_db_busy_timeout():
 
     full_stream = "".join(events)
     assert "Database connection pool busy" in full_stream
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_receives_live_token_chunks():
+    """
+    Verify that tokens published to TokenStreamManager are received in
+    real-time through the SSE stream.
+    """
+    from backend.app.core.stream import token_stream_manager
+    task_id = "test-live-stream-task-123"
+
+    db = SessionLocal()
+    task = Task(id=task_id, prompt="Test stream prompt", plugin_name="default", status="running")
+    db.add(task)
+    db.commit()
+    db.close()
+
+    try:
+        mock_request = MagicMock()
+        disconnect_calls = 0
+
+        async def mock_is_disconnected():
+            nonlocal disconnect_calls
+            disconnect_calls += 1
+            return disconnect_calls >= 3
+
+        mock_request.is_disconnected = mock_is_disconnected
+
+        # Publish live token chunks in the background
+        async def publish_tokens():
+            await asyncio.sleep(0.05)
+            await token_stream_manager.publish_token(
+                task_id=task_id,
+                agent_name="Coder",
+                chunk="def stream_code():\n",
+                subtask_id="sub-1"
+            )
+            await token_stream_manager.publish_token(
+                task_id=task_id,
+                agent_name="Coder",
+                chunk="    return True\n",
+                subtask_id="sub-1"
+            )
+
+        asyncio.create_task(publish_tokens())
+
+        resp = await stream_task_updates(task_id=task_id, request=mock_request)
+        events = []
+        async for chunk in resp.body_iterator:
+            events.append(chunk)
+
+        full_stream = "".join(events)
+        assert "def stream_code():" in full_stream
+        assert "return True" in full_stream
+        assert '"event": "token"' in full_stream
+    finally:
+        db = SessionLocal()
+        t = db.query(Task).filter(Task.id == task_id).first()
+        if t:
+            db.delete(t)
+            db.commit()
+        db.close()
+
+
+
+@pytest.mark.asyncio
+async def test_base_agent_execute_llm_streams_tokens():
+    """
+    Verify that BaseAgent.execute_llm streams tokens to TokenStreamManager.
+    """
+    from backend.app.agents.base import BaseAgent
+    from backend.app.core.stream import token_stream_manager
+
+    task_id = "test-agent-stream-task-456"
+    sub_q = await token_stream_manager.subscribe(task_id)
+
+    try:
+        agent = BaseAgent(name="TestStreamer", system_instruction="Streaming tester")
+        agent.has_llm = False  # Demo streaming mode
+
+        output = await agent.execute_llm(
+            prompt="Stream test prompt",
+            task_id=task_id,
+            mock_response_content="TokenA TokenB TokenC"
+        )
+
+        assert output == "TokenA TokenB TokenC"
+
+        received_chunks = []
+        while not sub_q.empty():
+            evt = sub_q.get_nowait()
+            received_chunks.append(evt["data"]["chunk"])
+
+        combined = "".join(received_chunks)
+        assert "TokenA" in combined
+        assert "TokenB" in combined
+        assert "TokenC" in combined
+    finally:
+        await token_stream_manager.unsubscribe(task_id, sub_q)
