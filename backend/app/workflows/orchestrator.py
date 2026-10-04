@@ -84,12 +84,27 @@ def update_task_in_db(task_id: str, status: str, final_result: str = None):
             if final_result is not None:
                 t.final_result = final_result
             
-            # Aggregate telemetry metrics across agent logs
+            # Aggregate telemetry metrics across agent logs (filter for canonical logs to avoid double counting)
             logs = db.query(AgentLog).filter(AgentLog.task_id == task_id).all()
             if logs:
-                t.total_tokens = sum(l.total_tokens or 0 for l in logs)
-                t.total_cost_usd = sum(l.cost_usd or 0.0 for l in logs)
-                t.total_latency_ms = sum(l.latency_ms or 0.0 for l in logs)
+                canonical_logs = [
+                    l for l in logs
+                    if l.log_type == "output" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+                ]
+                if not canonical_logs:
+                    canonical_logs = [
+                        l for l in logs
+                        if l.log_type != "telemetry" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+                    ]
+                if not canonical_logs:
+                    canonical_logs = [
+                        l for l in logs
+                        if ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+                    ]
+
+                t.total_tokens = sum(l.total_tokens or 0 for l in canonical_logs)
+                t.total_cost_usd = sum(l.cost_usd or 0.0 for l in canonical_logs)
+                t.total_latency_ms = sum(l.latency_ms or 0.0 for l in canonical_logs)
 
             db.commit()
     except Exception as e:

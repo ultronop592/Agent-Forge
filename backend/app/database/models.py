@@ -28,10 +28,35 @@ class Task(Base):
         scores = [s.confidence_score for s in self.subtasks if s.confidence_score and s.confidence_score > 0] if self.subtasks else []
         conf = max(scores) if scores else (0.95 if self.status == "completed" else 0.0)
         
-        # Aggregate logs telemetry if not explicitly stored
-        log_tokens = sum(l.total_tokens or 0 for l in self.logs) if self.logs else 0
-        log_cost = sum(l.cost_usd or 0.0 for l in self.logs) if self.logs else 0.0
-        log_latency = sum(l.latency_ms or 0.0 for l in self.logs) if self.logs else 0.0
+        # Aggregate logs telemetry: prefer canonical "output" logs to prevent double-counting
+        # with "telemetry" console logs or other display duplicates.
+        canonical_logs = [
+            l for l in self.logs
+            if l.log_type == "output" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+        ] if self.logs else []
+
+        if not canonical_logs and self.logs:
+            # Fallback 1: any non-telemetry logs with metrics (e.g. tool execution or custom logs)
+            canonical_logs = [
+                l for l in self.logs
+                if l.log_type != "telemetry" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+            ]
+
+        if not canonical_logs and self.logs:
+            # Fallback 2: legacy or mock data where metrics were only recorded on 'telemetry' logs
+            canonical_logs = [
+                l for l in self.logs
+                if ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+            ]
+
+        log_tokens = sum(l.total_tokens or 0 for l in canonical_logs)
+        log_cost = sum(l.cost_usd or 0.0 for l in canonical_logs)
+        log_latency = sum(l.latency_ms or 0.0 for l in canonical_logs)
+
+        # Prioritize accurate computed metrics from logs if available; fallback to stored task columns
+        total_tokens = log_tokens if log_tokens > 0 else (self.total_tokens or 0)
+        total_cost_usd = log_cost if log_cost > 0.0 else (self.total_cost_usd or 0.0)
+        total_latency_ms = log_latency if log_latency > 0.0 else (self.total_latency_ms or 0.0)
 
         return {
             "id": self.id,
@@ -40,9 +65,9 @@ class Task(Base):
             "plugin_name": self.plugin_name,
             "final_result": self.final_result,
             "confidence_score": conf,
-            "total_tokens": self.total_tokens or log_tokens,
-            "total_cost_usd": round(self.total_cost_usd or log_cost, 6),
-            "total_latency_ms": round(self.total_latency_ms or log_latency, 2),
+            "total_tokens": total_tokens,
+            "total_cost_usd": round(total_cost_usd, 6),
+            "total_latency_ms": round(total_latency_ms, 2),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

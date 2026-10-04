@@ -185,17 +185,12 @@ class BaseAgent:
                         cost_usd=cost_usd
                     )
 
-                    # Surface high-signal telemetry log
+                    # Surface high-signal telemetry log for Thinking Console display
                     self.log_db(
                         task_id, subtask_id, "telemetry",
                         f"📊 [{self.name} Metrics] Latency: {elapsed_ms:.1f}ms | "
                         f"Tokens: {total_tokens:,} (Prompt: {prompt_tokens:,}, Output: {completion_tokens:,}) | "
-                        f"Est. Cost: ${cost_usd:.6f}",
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=total_tokens,
-                        latency_ms=elapsed_ms,
-                        cost_usd=cost_usd
+                        f"Est. Cost: ${cost_usd:.6f}"
                     )
                     return result_text
                 

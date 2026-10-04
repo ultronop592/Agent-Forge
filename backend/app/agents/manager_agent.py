@@ -180,7 +180,22 @@ class ManagerAgent(BaseAgent):
 
         try:
             logs = db.query(AgentLog).filter(AgentLog.task_id == task_id).all()
-            for log in logs:
+            canonical_logs = [
+                l for l in logs
+                if l.log_type == "output" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+            ]
+            if not canonical_logs:
+                canonical_logs = [
+                    l for l in logs
+                    if l.log_type != "telemetry" and ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+                ]
+            if not canonical_logs:
+                canonical_logs = [
+                    l for l in logs
+                    if ((l.total_tokens or 0) > 0 or (l.cost_usd or 0.0) > 0.0 or (l.latency_ms or 0.0) > 0.0)
+                ]
+
+            for log in canonical_logs:
                 if log.prompt_tokens:
                     prompt_tokens += log.prompt_tokens
                 if log.completion_tokens:
