@@ -4,6 +4,11 @@ from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Tex
 from sqlalchemy.orm import relationship
 from backend.app.database.connection import Base
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    Vector = None
+
 def generate_uuid():
     return str(uuid.uuid4())
 
@@ -145,15 +150,26 @@ class Memory(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     category = Column(String, default="factual")  # factual, semantic, execution_log
     content = Column(Text, nullable=False)
-    embedding_searchable_text = Column(Text, nullable=True)  # Simple keywords/text for queries
+    embedding_searchable_text = Column(Text, nullable=True)  # Simple keywords/text for queries or JSON fallback
+    embedding = Column(Vector(768), nullable=True) if Vector is not None else Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def to_dict(self):
+        emb_val = None
+        if self.embedding is not None:
+            if hasattr(self.embedding, "tolist"):
+                emb_val = self.embedding.tolist()
+            elif isinstance(self.embedding, (list, tuple)):
+                emb_val = list(self.embedding)
+            else:
+                emb_val = self.embedding
+
         return {
             "id": self.id,
             "category": self.category,
             "content": self.content,
             "embedding_searchable_text": self.embedding_searchable_text,
+            "embedding": emb_val,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 

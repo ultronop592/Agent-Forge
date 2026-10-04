@@ -26,9 +26,33 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+# SQLAlchemy event hooks to prepare pgvector extension and indexes
+from sqlalchemy import event, text
+
+@event.listens_for(Base.metadata, "before_create")
+def before_create_hook(target, connection, **kw):
+    """Enable vector extension on PostgreSQL prior to table creation."""
+    try:
+        if not str(connection.engine.url).startswith("sqlite"):
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception:
+        pass
+
+
+@event.listens_for(Base.metadata, "after_create")
+def after_create_hook(target, connection, **kw):
+    """Create HNSW vector index on memories table after creation on PostgreSQL."""
+    try:
+        if not str(connection.engine.url).startswith("sqlite"):
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_memories_embedding_hnsw ON memories USING hnsw (embedding vector_cosine_ops)")
+            )
+    except Exception:
+        pass
+
+
 def ensure_db_schema():
-    """Ensure newly added columns exist in SQLite or PostgreSQL."""
-    from sqlalchemy import text
+    """Ensure newly added columns and pgvector extensions exist in SQLite or PostgreSQL."""
     is_sqlite = str(engine.url).startswith("sqlite")
     
     task_cols = [
@@ -61,9 +85,23 @@ def ensure_db_schema():
                         conn.commit()
                     except Exception:
                         pass
+
+                # Add embedding column to memories if not present in SQLite
+                try:
+                    conn.execute(text("ALTER TABLE memories ADD COLUMN embedding vector(768)"))
+                    conn.commit()
+                except Exception:
+                    pass
         else:
             with engine.connect() as conn:
-                # Query existing columns in tasks
+                # 1. Enable pgvector extension
+                try:
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+                # 2. Query existing columns in tasks
                 res_tasks = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='tasks'")).fetchall()
                 existing_task_cols = {row[0] for row in res_tasks}
                 for col_name, col_type in task_cols:
@@ -71,13 +109,30 @@ def ensure_db_schema():
                         conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
 
-                # Query existing columns in agent_logs
+                # 3. Query existing columns in agent_logs
                 res_logs = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='agent_logs'")).fetchall()
                 existing_log_cols = {row[0] for row in res_logs}
                 for col_name, col_type in log_cols:
                     if col_name not in existing_log_cols:
                         conn.execute(text(f"ALTER TABLE agent_logs ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
+
+                # 4. Check memories table for pgvector column & HNSW index
+                res_mem = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='memories'")).fetchall()
+                existing_mem_cols = {row[0] for row in res_mem}
+                if existing_mem_cols and "embedding" not in existing_mem_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE memories ADD COLUMN embedding vector(768)"))
+                        conn.commit()
+                    except Exception:
+                        pass
+
+                if existing_mem_cols:
+                    try:
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_memories_embedding_hnsw ON memories USING hnsw (embedding vector_cosine_ops)"))
+                        conn.commit()
+                    except Exception:
+                        pass
     except Exception:
         pass
 
@@ -90,6 +145,7 @@ def get_db():
         db.close()
 
 
-# Auto-migrate newly added telemetry columns
+# Auto-migrate newly added telemetry and vector columns
 ensure_db_schema()
+
 

@@ -88,7 +88,42 @@ class MemoryAgent(BaseAgent):
             # 1. Fetch query vector using Gemini embedding
             query_vector = self.get_embedding(query)
 
-            # 2. Query memories — across all categories if category is empty/None
+            # Determine whether database dialect supports native pgvector (<=>)
+            is_sqlite = False
+            try:
+                if db.bind:
+                    is_sqlite = (db.bind.dialect.name == "sqlite")
+            except Exception:
+                is_sqlite = True
+
+            # 2. Native indexed pgvector search on PostgreSQL
+            if not is_sqlite and hasattr(Memory, "embedding"):
+                try:
+                    dist_expr = Memory.embedding.cosine_distance(query_vector)
+                    sim_expr = (1.0 - dist_expr).label("similarity_score")
+
+                    q = db.query(Memory, sim_expr).filter(Memory.embedding.isnot(None))
+                    if category and category.strip() and category.strip().lower() != "all":
+                        q = q.filter(Memory.category == category.strip())
+
+                    # Filter by minimum cosine similarity (distance <= 1 - min_score)
+                    q = q.filter(dist_expr <= (1.0 - min_score))
+                    q = q.order_by(dist_expr.asc()).limit(top_k)
+
+                    rows = q.all()
+                    if rows:
+                        results = []
+                        for mem, sim in rows:
+                            sim_score = max(0.0, float(sim))
+                            mem_dict = mem.to_dict()
+                            mem_dict["similarity_score"] = round(sim_score, 4)
+                            mem_dict["match_percentage"] = f"{int(round(sim_score * 100))}%"
+                            results.append(mem_dict)
+                        return results, query_vector
+                except Exception as pg_err:
+                    logger.warning(f"Native pgvector query failed, falling back to Python scan: {pg_err}")
+
+            # 3. Fallback: in-Python scan (SQLite, missing extension, or keyword fallback)
             db_query = db.query(Memory)
             if category and category.strip() and category.strip().lower() != "all":
                 db_query = db_query.filter(Memory.category == category)
@@ -100,8 +135,10 @@ class MemoryAgent(BaseAgent):
                 score = 0.0
                 content_lower = mem.content.lower()
 
-                # Vector Cosine Similarity Search
-                if mem.embedding_searchable_text:
+                # Vector Cosine Similarity Search: check mem.embedding or JSON string
+                if mem.embedding is not None and isinstance(mem.embedding, (list, tuple)) and len(mem.embedding) > 0:
+                    score = self._cosine_similarity(query_vector, list(mem.embedding))
+                elif mem.embedding_searchable_text:
                     try:
                         vector = json.loads(mem.embedding_searchable_text)
                         if isinstance(vector, list) and len(vector) > 0 and isinstance(vector[0], (int, float)):
@@ -153,7 +190,8 @@ class MemoryAgent(BaseAgent):
             mem = Memory(
                 category=category,
                 content=content,
-                embedding_searchable_text=embedding_json
+                embedding_searchable_text=embedding_json,
+                embedding=embedding_vector,
             )
             db.add(mem)
             db.commit()
@@ -166,6 +204,7 @@ class MemoryAgent(BaseAgent):
             return {}
         finally:
             db.close()
+
 
     async def run_subtask(
         self,
