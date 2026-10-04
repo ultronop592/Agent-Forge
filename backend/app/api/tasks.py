@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
@@ -95,8 +95,18 @@ async def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db
     return task.to_dict()
 
 @router.get("")
-def list_tasks(db: Session = Depends(get_db)):
-    tasks = db.query(Task).order_by(Task.created_at.desc()).all()
+def list_tasks(
+    skip: int = Query(0, ge=0, description="Number of tasks to skip for pagination"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of tasks to return"),
+    db: Session = Depends(get_db)
+):
+    tasks = (
+        db.query(Task)
+        .order_by(Task.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return [t.to_dict() for t in tasks]
 
 @router.get("/{task_id}")

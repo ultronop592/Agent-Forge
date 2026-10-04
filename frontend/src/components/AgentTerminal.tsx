@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Terminal, ShieldAlert, CheckCircle, Info, ExternalLink, Copy, Check } from "lucide-react";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 interface LogEntry {
   id: number;
@@ -143,14 +144,20 @@ export default function AgentTerminal({ logs, isStreaming = false }: AgentTermin
                     {log.log_type}
                   </span>
                 </div>
-                <div className={`whitespace-pre-wrap leading-relaxed mt-1 text-[11px] font-mono ${
+                <div className={`leading-relaxed mt-1 text-[11px] font-mono ${
                   log.log_type === "thinking" ? "text-zinc-300"
                   : log.log_type === "output" ? "text-zinc-200"
                   : log.log_type === "manager_decision" ? "text-amber-200 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2"
                   : getLogColor(log.log_type)
                 }`}>
-                  {getLogIcon(log.log_type)}
-                  {log.content}
+                  <div className="flex items-start gap-1.5">
+                    {getLogIcon(log.log_type) && (
+                      <span className="shrink-0 mt-0.5">{getLogIcon(log.log_type)}</span>
+                    )}
+                    <div className="flex-1 min-w-0 overflow-x-auto">
+                      <MarkdownRenderer content={log.content} />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

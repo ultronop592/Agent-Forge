@@ -30,8 +30,12 @@ export const api = {
     });
   },
 
-  async getTasks() {
-    return def_fetch("/tasks");
+  async getTasks(skip?: number, limit?: number) {
+    const params = new URLSearchParams();
+    if (skip !== undefined) params.append("skip", String(skip));
+    if (limit !== undefined) params.append("limit", String(limit));
+    const qs = params.toString();
+    return def_fetch(`/tasks${qs ? `?${qs}` : ""}`);
   },
 
   async getTask(taskId: string) {
