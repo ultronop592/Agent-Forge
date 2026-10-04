@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import AgentCard from "@/components/AgentCard";
-import { Users, Compass, Search, BrainCircuit, FileCode, ShieldCheck, FolderGit, Sparkles, ArrowRight } from "lucide-react";
+import { Users, Compass, Search, BrainCircuit, FileCode, ShieldCheck, FolderGit, Sparkles, ArrowRight, Sliders } from "lucide-react";
 import Link from "next/link";
 
 interface Agent {
@@ -93,13 +93,23 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <Link
-          href="/chat"
-          className="px-4 py-2.5 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-white text-xs font-bold flex items-center gap-2 transition-colors self-start md:self-center"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Deploy Workforce</span>
-        </Link>
+        <div className="flex items-center gap-2.5 self-start md:self-center">
+          <Link
+            href="/settings"
+            className="px-3.5 py-2.5 rounded-xl border border-zinc-800 bg-[#18181b] hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors"
+          >
+            <Sliders className="w-3.5 h-3.5 text-[#da7756]" />
+            <span>Tune Parameters</span>
+          </Link>
+
+          <Link
+            href="/chat"
+            className="px-4 py-2.5 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-white text-xs font-bold flex items-center gap-2 transition-colors shadow-lg shadow-[#da7756]/10"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Deploy Workforce</span>
+          </Link>
+        </div>
       </div>
 
       {/* Workforce Architecture Highlights */}

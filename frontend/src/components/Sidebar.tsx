@@ -14,7 +14,8 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
-  Users
+  Users,
+  Sliders
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { label: "Memory Bank", href: "/memory", icon: BrainCircuit, badge: null },
   { label: "MCP Control", href: "/mcp", icon: Cpu, badge: "JSON-RPC" },
   { label: "Workforce Plugins", href: "/plugins", icon: PocketKnife, badge: null },
+  { label: "Settings & Tuning", href: "/settings", icon: Sliders, badge: "Config" },
 ];
 
 export default function Sidebar() {

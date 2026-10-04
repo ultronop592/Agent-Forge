@@ -205,6 +205,42 @@ class MemoryAgent(BaseAgent):
         finally:
             db.close()
 
+    def delete_memory(self, memory_id: str) -> bool:
+        """Delete a specific memory node by ID."""
+        db = SessionLocal()
+        try:
+            mem = db.query(Memory).filter(Memory.id == memory_id).first()
+            if not mem:
+                return False
+            db.delete(mem)
+            db.commit()
+            logger.info(f"[MemoryAgent] Deleted memory node: {memory_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete memory {memory_id}: {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
+
+    def clear_memories(self, category: Optional[str] = None) -> int:
+        """Clear memories, optionally filtered by category. Returns count deleted."""
+        db = SessionLocal()
+        try:
+            q = db.query(Memory)
+            if category and category.strip() and category.lower() != "all":
+                q = q.filter(Memory.category == category.strip())
+            count = q.delete(synchronize_session=False)
+            db.commit()
+            logger.info(f"[MemoryAgent] Cleared {count} memory nodes (category: {category or 'all'})")
+            return count
+        except Exception as e:
+            logger.error(f"Failed to clear memories: {e}")
+            db.rollback()
+            return 0
+        finally:
+            db.close()
+
 
     async def run_subtask(
         self,

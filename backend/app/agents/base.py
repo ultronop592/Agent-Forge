@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 from backend.app.core.config import settings
+from backend.app.core.agent_config import agent_config_registry
 from backend.app.core.telemetry import calculate_cost, agent_traceable
 from backend.app.core.stream import token_stream_manager
 from backend.app.database.connection import SessionLocal
@@ -87,15 +88,16 @@ class BaseAgent:
         finally:
             db.close()
 
-    async def _stream_content(self, prompt: str, config: types.GenerateContentConfig):
+    async def _stream_content(self, prompt: str, config: types.GenerateContentConfig, model: Optional[str] = None):
         """
         Stream chunks using generate_content_stream.
         Prefers asynchronous client.aio stream when available, falling back to
         synchronous client.models stream in a dedicated executor thread.
         """
+        target_model = model or agent_config_registry.get_model(self.name)
         if hasattr(self.client, "aio") and hasattr(self.client.aio, "models") and hasattr(self.client.aio.models, "generate_content_stream"):
             response_stream = await self.client.aio.models.generate_content_stream(
-                model='gemini-2.5-flash',
+                model=target_model,
                 contents=prompt,
                 config=config
             )
@@ -105,7 +107,7 @@ class BaseAgent:
             loop = asyncio.get_running_loop()
             def get_sync_stream():
                 return self.client.models.generate_content_stream(
-                    model='gemini-2.5-flash',
+                    model=target_model,
                     contents=prompt,
                     config=config
                 )
@@ -127,9 +129,25 @@ class BaseAgent:
         self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is analyzing prompt:\n\"{prompt[:150]}...\"")
         start_time = time.perf_counter()
 
+        # Read dynamic agent configurations
+        agent_cfg = agent_config_registry.get_agent_config(self.name)
+        effective_model = agent_cfg.get("model") or self.cost_model or "gemini-2.5-flash"
+        effective_temp = float(agent_cfg.get("temperature", 0.2))
+        custom_inst = agent_cfg.get("custom_instruction", "")
+
+        full_system_instruction = self.system_instruction
+        if custom_inst:
+            full_system_instruction = f"{self.system_instruction}\n\n[USER DIRECTIVE FOR {self.name.upper()}]:\n{custom_inst}"
+
+        # Dynamic token budget ceiling
+        configured_budget = agent_cfg.get("token_budget")
+        effective_max_tokens = max_output_tokens
+        if configured_budget and int(configured_budget) > 0:
+            effective_max_tokens = int(configured_budget)
+
         if not self.has_llm:
             # Generate or return mock response
-            self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is running in DEMO mode.")
+            self.log_db(task_id, subtask_id, "thinking", f"Agent '{self.name}' is running in DEMO mode ({effective_model}).")
             
             if response_schema and mock_response_content:
                 try:
@@ -158,7 +176,7 @@ class BaseAgent:
             p_tokens = int(len(prompt.split()) * 1.3)
             c_tokens = int(len(res_content.split()) * 1.3)
             tot_tokens = p_tokens + c_tokens
-            cost = calculate_cost(p_tokens, c_tokens, model=self.cost_model)
+            cost = calculate_cost(p_tokens, c_tokens, model=effective_model)
 
             self.log_db(
                 task_id, subtask_id, "output", res_content,
@@ -175,12 +193,12 @@ class BaseAgent:
             if response_schema:
                 config_params["response_mime_type"] = "application/json"
                 config_params["response_schema"] = response_schema
-            if max_output_tokens:
-                config_params["max_output_tokens"] = max_output_tokens
+            if effective_max_tokens:
+                config_params["max_output_tokens"] = effective_max_tokens
             
             config = types.GenerateContentConfig(
-                system_instruction=self.system_instruction,
-                temperature=0.2,
+                system_instruction=full_system_instruction,
+                temperature=effective_temp,
                 **config_params
             )
 
@@ -191,7 +209,7 @@ class BaseAgent:
                     collected_chunks: List[str] = []
                     usage_metadata = None
 
-                    async for chunk in self._stream_content(prompt, config):
+                    async for chunk in self._stream_content(prompt, config, model=effective_model):
                         txt = getattr(chunk, "text", "") or ""
                         if txt:
                             collected_chunks.append(txt)
@@ -219,7 +237,7 @@ class BaseAgent:
                     if total_tokens is None:
                         total_tokens = prompt_tokens + completion_tokens
 
-                    cost_usd = calculate_cost(prompt_tokens, completion_tokens, model=self.cost_model)
+                    cost_usd = calculate_cost(prompt_tokens, completion_tokens, model=effective_model)
 
                     # Log the final agent output with token & latency telemetry
                     self.log_db(

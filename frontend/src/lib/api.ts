@@ -82,6 +82,34 @@ export const api = {
     return def_fetch("/agents");
   },
 
+  async getAgentConfigs() {
+    return def_fetch("/agents/config");
+  },
+
+  async getAgentConfig(agentName: string) {
+    return def_fetch(`/agents/config/${agentName}`);
+  },
+
+  async updateAgentConfig(agentName: string, config: { model?: string; temperature?: number; token_budget?: number; custom_instruction?: string }) {
+    return def_fetch(`/agents/config/${agentName}`, {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  },
+
+  async updateBulkAgentConfigs(configs: Record<string, any>) {
+    return def_fetch("/agents/config", {
+      method: "PUT",
+      body: JSON.stringify({ configs }),
+    });
+  },
+
+  async resetAgentConfigs() {
+    return def_fetch("/agents/config/reset", {
+      method: "POST",
+    });
+  },
+
   // Plugins
   async getPlugins() {
     return def_fetch("/plugins");
@@ -96,10 +124,29 @@ export const api = {
     return def_fetch(`/memory${queryStr}`);
   },
 
+  async getMemoryStats() {
+    return def_fetch("/memory/stats");
+  },
+
   async addMemory(content: string, category: string = "factual") {
     return def_fetch("/memory", {
       method: "POST",
       body: JSON.stringify({ content, category }),
+    });
+  },
+
+  async deleteMemory(memoryId: string) {
+    return def_fetch(`/memory/${memoryId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async clearMemories(category?: string) {
+    const params = new URLSearchParams();
+    if (category && category !== "all") params.append("category", category);
+    const queryStr = params.toString() ? `?${params.toString()}` : "";
+    return def_fetch(`/memory${queryStr}`, {
+      method: "DELETE",
     });
   },
 
