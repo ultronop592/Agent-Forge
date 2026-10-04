@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
     hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
     
+    # SSE Streaming & Concurrency Settings
+    sse_db_pool_limit: int = Field(default=5, validation_alias="SSE_DB_POOL_LIMIT")
+
     # LangSmith Observability & Tracing Settings
     langsmith_tracing: bool = Field(default=False, validation_alias="LANGSMITH_TRACING")
     langsmith_api_key: str = Field(default="", validation_alias="LANGSMITH_API_KEY")
