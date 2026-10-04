@@ -26,6 +26,7 @@ class BaseAgent:
         self.name = name
         self.system_instruction = system_instruction
         self.api_key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+        self.cost_model = getattr(settings, "cost_model", None) or os.environ.get("COST_MODEL", "gemini-2.5-flash")
         
         if self.api_key:
             try:
@@ -118,7 +119,7 @@ class BaseAgent:
             p_tokens = int(len(prompt.split()) * 1.3)
             c_tokens = int(len(res_content.split()) * 1.3)
             tot_tokens = p_tokens + c_tokens
-            cost = calculate_cost(p_tokens, c_tokens, model="gemini-2.5-flash")
+            cost = calculate_cost(p_tokens, c_tokens, model=self.cost_model)
 
             self.log_db(
                 task_id, subtask_id, "output", res_content,
@@ -173,7 +174,7 @@ class BaseAgent:
                     if total_tokens is None:
                         total_tokens = prompt_tokens + completion_tokens
 
-                    cost_usd = calculate_cost(prompt_tokens, completion_tokens, model="gemini-2.5-flash")
+                    cost_usd = calculate_cost(prompt_tokens, completion_tokens, model=self.cost_model)
 
                     # Log the final agent output with token & latency telemetry
                     self.log_db(

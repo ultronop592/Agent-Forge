@@ -23,3 +23,24 @@ async def test_verify_api_key_invalid_header():
         await verify_api_key(x_api_key="wrong-key", credentials=None)
     assert exc_info.value.status_code == 401
     settings.api_secret_key = ""  # Reset after test
+
+
+def test_validate_allowed_origins_wildcard():
+    from backend.app.main import validate_allowed_origins
+    warning = validate_allowed_origins(["*"])
+    assert warning is not None
+    assert "ALLOWED_ORIGINS contains wildcard '*'" in warning
+
+
+def test_validate_allowed_origins_empty():
+    from backend.app.main import validate_allowed_origins
+    warning = validate_allowed_origins([])
+    assert warning is not None
+    assert "ALLOWED_ORIGINS is empty" in warning
+
+
+def test_validate_allowed_origins_explicit():
+    from backend.app.main import validate_allowed_origins
+    warning = validate_allowed_origins(["https://agentforge.vercel.app", "http://localhost:3000"])
+    assert warning is None
+

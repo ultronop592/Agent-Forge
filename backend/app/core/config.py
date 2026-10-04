@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # SSE Streaming & Concurrency Settings
     sse_db_pool_limit: int = Field(default=5, validation_alias="SSE_DB_POOL_LIMIT")
 
+    # Cost Telemetry & Model Settings
+    cost_model: str = Field(default="gemini-2.5-flash", validation_alias="COST_MODEL")
+
+    # Security & CORS Settings
+    allowed_origins: str = Field(default="*", validation_alias="ALLOWED_ORIGINS")
+
     # LangSmith Observability & Tracing Settings
     langsmith_tracing: bool = Field(default=False, validation_alias="LANGSMITH_TRACING")
     langsmith_api_key: str = Field(default="", validation_alias="LANGSMITH_API_KEY")

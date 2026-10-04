@@ -33,8 +33,10 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 }
 
 
-def calculate_cost(prompt_tokens: int, completion_tokens: int, model: str = "gemini-2.5-flash") -> float:
+def calculate_cost(prompt_tokens: int, completion_tokens: int, model: Optional[str] = None) -> float:
     """Calculate the estimated USD cost of an LLM call based on token usage."""
+    if not model:
+        model = getattr(settings, "cost_model", None) or os.environ.get("COST_MODEL", "gemini-2.5-flash")
     pricing = MODEL_PRICING.get(model, MODEL_PRICING["default"])
     input_cost = (prompt_tokens / 1_000_000.0) * pricing["input_per_million"]
     output_cost = (completion_tokens / 1_000_000.0) * pricing["output_per_million"]

@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+from typing import Optional, List
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -38,8 +39,22 @@ app = FastAPI(
 
 # CORS configuration — reads comma-separated origins from ALLOWED_ORIGINS env var
 # e.g. ALLOWED_ORIGINS=https://agentforge.vercel.app,https://localhost:3000
-_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+_raw_origins = getattr(settings, "allowed_origins", None) or os.environ.get("ALLOWED_ORIGINS", "*")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
+
+def validate_allowed_origins(origins: list) -> Optional[str]:
+    """Validate CORS ALLOWED_ORIGINS configuration and return warning message if insecure."""
+    if "*" in origins:
+        return (
+            "⚠️ [Security Warning] ALLOWED_ORIGINS contains wildcard '*' with allow_credentials=True. "
+            "In production environments, specify explicit origins (e.g. ALLOWED_ORIGINS=https://agentforge.vercel.app) "
+            "to prevent Cross-Origin Resource Sharing (CORS) security vulnerabilities."
+        )
+    if not origins:
+        return "⚠️ [Security Warning] ALLOWED_ORIGINS is empty. All cross-origin browser requests will be blocked."
+    return None
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,6 +82,13 @@ def healthcheck():
 @app.on_event("startup")
 async def startup_event():
     logger.info("AgentForge application startup initiated.")
+
+    # Validate ALLOWED_ORIGINS and emit warning if wildcard or empty
+    cors_warning = validate_allowed_origins(ALLOWED_ORIGINS)
+    if cors_warning:
+        logger.warning(cors_warning)
+    else:
+        logger.info(f"🔒 CORS configured with {len(ALLOWED_ORIGINS)} allowed origin(s): {ALLOWED_ORIGINS}")
     
     # Load and initialize registered MCP servers from database
     db = SessionLocal()

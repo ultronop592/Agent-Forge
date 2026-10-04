@@ -26,6 +26,30 @@ def test_calculate_cost_gemini():
     assert pytest.approx(cost_small, 0.000001) == expected
 
 
+def test_configurable_cost_model():
+    from backend.app.core.config import settings
+
+    # Default should be gemini-2.5-flash
+    assert settings.cost_model == "gemini-2.5-flash"
+
+    # calculate_cost with no model argument uses settings.cost_model
+    cost_default = calculate_cost(1_000_000, 1_000_000)
+    assert pytest.approx(cost_default, 0.0001) == 0.375
+
+    # calculate_cost with explicit gemini-1.5-pro (1.25 + 5.00 = 6.25)
+    cost_pro = calculate_cost(1_000_000, 1_000_000, model="gemini-1.5-pro")
+    assert pytest.approx(cost_pro, 0.0001) == 6.25
+
+    # BaseAgent initializes self.cost_model from settings/env var
+    agent = BaseAgent(name="CostTestAgent", system_instruction="Testing cost")
+    assert agent.cost_model == "gemini-2.5-flash"
+
+    # BaseAgent with overridden cost_model
+    with patch.object(settings, "cost_model", "gemini-1.5-pro"):
+        agent_pro = BaseAgent(name="CostTestPro", system_instruction="Testing pro cost")
+        assert agent_pro.cost_model == "gemini-1.5-pro"
+
+
 def test_setup_langsmith_enabled():
     with patch.dict(os.environ, {"LANGSMITH_API_KEY": "", "LANGCHAIN_API_KEY": "", "LANGSMITH_TRACING": "", "LANGCHAIN_TRACING_V2": "", "LANGSMITH_PROJECT": "", "LANGCHAIN_PROJECT": ""}, clear=False):
         with patch("backend.app.core.telemetry.settings") as mock_settings:
