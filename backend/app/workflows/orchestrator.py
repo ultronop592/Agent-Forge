@@ -6,6 +6,8 @@ from langgraph.graph import StateGraph, END
 from backend.app.workflows.state import AgentState
 from backend.app.agents.planner import PlannerAgent
 from backend.app.agents.analyst_agent import AnalystAgent
+from backend.app.agents.researcher import ResearcherAgent
+from backend.app.agents.reasoner import ReasonerAgent
 from backend.app.agents.executor import ExecutorAgent
 from backend.app.agents.verifier import VerifierAgent
 from backend.app.agents.memory_agent import MemoryAgent
@@ -43,12 +45,14 @@ def _truncate_context(context: str, char_limit: int, label: str) -> str:
 # ---------------------------------------------------------------------------
 # Agent instances
 # ---------------------------------------------------------------------------
-planner_agent   = PlannerAgent()
-analyst_agent   = AnalystAgent()
-executor_agent  = ExecutorAgent()
-verifier_agent  = VerifierAgent()
-memory_agent    = MemoryAgent()
-manager_agent   = ManagerAgent()
+planner_agent    = PlannerAgent()
+analyst_agent    = AnalystAgent()
+researcher_agent = ResearcherAgent()
+reasoner_agent   = ReasonerAgent()
+executor_agent   = ExecutorAgent()
+verifier_agent   = VerifierAgent()
+memory_agent     = MemoryAgent()
+manager_agent    = ManagerAgent()
 
 
 # ---------------------------------------------------------------------------
@@ -98,15 +102,16 @@ def update_task_in_db(task_id: str, status: str, final_result: str = None):
 # Stage nodes
 # ---------------------------------------------------------------------------
 async def planner_node(state: AgentState) -> Dict[str, Any]:
-    task_id = state["task_id"]
-    prompt  = state["prompt"]
+    task_id     = state["task_id"]
+    prompt      = state["prompt"]
+    plugin_name = state.get("plugin_name", "default")
 
     update_task_in_db(task_id, "running")
 
     manager_agent.log_db(task_id, None, "manager_decision",
         "🧭 [Manager] Workforce activated. Delegating to **Planner** to decompose the goal into subtasks.")
 
-    plan = await planner_agent.create_plan(prompt, task_id)
+    plan = await planner_agent.create_plan(prompt, task_id, plugin_name=plugin_name)
 
     db = SessionLocal()
     subtask_dicts = []
@@ -208,10 +213,10 @@ async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
     subtasks = state["subtasks"]
     idx = state["current_subtask_index"]
 
-    # Identify consecutive non-dependent research subtasks (memory_agent & analyst)
+    # Identify consecutive non-dependent research subtasks (memory_agent, analyst, researcher)
     pending_subtasks = []
     for s_idx in range(idx, len(subtasks)):
-        if subtasks[s_idx]["assigned_agent"] in ["memory_agent", "analyst"]:
+        if subtasks[s_idx]["assigned_agent"] in ["memory_agent", "analyst", "researcher"]:
             pending_subtasks.append((s_idx, subtasks[s_idx]))
         else:
             break
@@ -246,6 +251,15 @@ async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
             )
             update_subtask_in_db(sub_id, "completed", output=output)
             return sub_id, output, None, "Analyst"
+        elif agent_type == "researcher":
+            output = await researcher_agent.run_subtask(
+                subtask_title=sub["title"],
+                subtask_desc=sub["description"],
+                task_id=task_id,
+                subtask_id=sub_id
+            )
+            update_subtask_in_db(sub_id, "completed", output=output)
+            return sub_id, output, None, "Researcher"
         else:
             return sub_id, "", None, agent_type
 
@@ -330,6 +344,75 @@ async def analyst_node(state: AgentState) -> Dict[str, Any]:
     outputs = state["agent_outputs"].copy()
     outputs[subtask_id] = output
     seq = state.get("agent_sequence", []) + ["Analyst"]
+
+    return {
+        "agent_outputs": outputs,
+        "current_subtask_index": idx + 1,
+        "agent_sequence": seq,
+    }
+
+
+async def researcher_node(state: AgentState) -> Dict[str, Any]:
+    task_id    = state["task_id"]
+    idx        = state["current_subtask_index"]
+    subtask    = state["subtasks"][idx]
+    subtask_id = subtask["id"]
+
+    manager_agent.announce_start(task_id, "Researcher", subtask["title"], subtask_id)
+    update_subtask_in_db(subtask_id, "running")
+
+    output = await researcher_agent.run_subtask(
+        subtask_title=subtask["title"],
+        subtask_desc=subtask["description"],
+        task_id=task_id,
+        subtask_id=subtask_id
+    )
+
+    update_subtask_in_db(subtask_id, "completed", output=output)
+    manager_agent.announce_complete(task_id, "Researcher", subtask["title"], subtask_id)
+
+    outputs = state["agent_outputs"].copy()
+    outputs[subtask_id] = output
+    seq = state.get("agent_sequence", []) + ["Researcher"]
+
+    return {
+        "agent_outputs": outputs,
+        "current_subtask_index": idx + 1,
+        "agent_sequence": seq,
+    }
+
+
+async def reasoner_node(state: AgentState) -> Dict[str, Any]:
+    task_id    = state["task_id"]
+    idx        = state["current_subtask_index"]
+    subtask    = state["subtasks"][idx]
+    subtask_id = subtask["id"]
+
+    manager_agent.announce_start(task_id, "Reasoner", subtask["title"], subtask_id)
+    update_subtask_in_db(subtask_id, "running")
+
+    # Gather prior context
+    context_full = "\n\n".join([
+        f"--- Context: {sub['title']} ---\n{output}"
+        for sub_id, output in state["agent_outputs"].items()
+        for sub in state["subtasks"] if sub["id"] == sub_id
+    ])
+    context = _truncate_context(context_full, _EXECUTOR_CONTEXT_CHAR_LIMIT, "Reasoner")
+
+    output = await reasoner_agent.run_subtask(
+        subtask_title=subtask["title"],
+        subtask_desc=subtask["description"],
+        previous_outputs=context,
+        task_id=task_id,
+        subtask_id=subtask_id
+    )
+
+    update_subtask_in_db(subtask_id, "completed", output=output)
+    manager_agent.announce_complete(task_id, "Reasoner", subtask["title"], subtask_id)
+
+    outputs = state["agent_outputs"].copy()
+    outputs[subtask_id] = output
+    seq = state.get("agent_sequence", []) + ["Reasoner"]
 
     return {
         "agent_outputs": outputs,
@@ -574,7 +657,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 # Routing
 # ---------------------------------------------------------------------------
 def route_subtasks(state: AgentState) -> Literal[
-    "parallel_research", "analyst", "executor", "memory_agent", "verifier", "__end__"
+    "parallel_research", "analyst", "researcher", "reasoner", "executor", "memory_agent", "verifier", "__end__"
 ]:
     idx      = state["current_subtask_index"]
     subtasks = state["subtasks"]
@@ -582,10 +665,10 @@ def route_subtasks(state: AgentState) -> Literal[
     if idx >= len(subtasks):
         return "verifier"
 
-    # Count consecutive research subtasks (memory_agent / analyst) remaining from idx
+    # Count consecutive research subtasks (memory_agent / analyst / researcher) remaining from idx
     research_count = 0
     for i in range(idx, len(subtasks)):
-        if subtasks[i]["assigned_agent"] in ["memory_agent", "analyst"]:
+        if subtasks[i]["assigned_agent"] in ["memory_agent", "analyst", "researcher"]:
             research_count += 1
         else:
             break
@@ -597,6 +680,10 @@ def route_subtasks(state: AgentState) -> Literal[
     agent = subtasks[idx]["assigned_agent"]
     if agent == "analyst":
         return "analyst"
+    elif agent == "researcher":
+        return "researcher"
+    elif agent == "reasoner":
+        return "reasoner"
     elif agent == "executor":
         return "executor"
     elif agent == "memory_agent":
@@ -621,38 +708,38 @@ builder = StateGraph(AgentState)
 
 builder.add_node("planner",           planner_node)
 builder.add_node("parallel_research", parallel_research_node)
-builder.add_node("memory_agent",       memory_node)
+builder.add_node("memory_agent",      memory_node)
 builder.add_node("analyst",           analyst_node)
+builder.add_node("researcher",        researcher_node)
+builder.add_node("reasoner",          reasoner_node)
 builder.add_node("executor",          executor_node)
 builder.add_node("verifier",          verifier_node)
 
 builder.set_entry_point("planner")
 
+route_targets = {
+    "parallel_research": "parallel_research",
+    "memory_agent":      "memory_agent",
+    "analyst":           "analyst",
+    "researcher":        "researcher",
+    "reasoner":          "reasoner",
+    "executor":          "executor",
+    "verifier":          "verifier",
+}
+
 # Conditional edges after planner
 builder.add_conditional_edges(
     "planner",
     route_subtasks,
-    {
-        "parallel_research": "parallel_research",
-        "memory_agent":      "memory_agent",
-        "analyst":           "analyst",
-        "executor":          "executor",
-        "verifier":          "verifier",
-    }
+    route_targets
 )
 
 # Conditional edges after nodes
-for node in ["parallel_research", "memory_agent", "analyst", "executor"]:
+for node in ["parallel_research", "memory_agent", "analyst", "researcher", "reasoner", "executor"]:
     builder.add_conditional_edges(
         node,
         route_subtasks,
-        {
-            "parallel_research": "parallel_research",
-            "memory_agent":      "memory_agent",
-            "analyst":           "analyst",
-            "executor":          "executor",
-            "verifier":          "verifier",
-        }
+        route_targets
     )
 
 # Loopback or end

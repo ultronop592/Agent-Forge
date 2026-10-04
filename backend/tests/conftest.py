@@ -1,5 +1,10 @@
 import os
 import sys
+
+# On Python 3.14 on Windows, experimental mingw numpy crashes with access violation; block it in tests
+if sys.version_info >= (3, 14):
+    sys.modules["numpy"] = None
+
 import pytest
 from fastapi.testclient import TestClient
 

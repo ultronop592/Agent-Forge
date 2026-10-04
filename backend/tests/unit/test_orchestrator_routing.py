@@ -89,3 +89,74 @@ def test_route_verifier_output_end():
         "agent_retry_counts": {}
     }
     assert route_verifier_output(state) == "__end__"
+
+def test_route_subtasks_researcher():
+    state: AgentState = {
+        "task_id": "t1",
+        "prompt": "test",
+        "plugin_name": "default",
+        "subtasks": [
+            {"id": "s1", "assigned_agent": "researcher"},
+            {"id": "s2", "assigned_agent": "executor"}
+        ],
+        "current_subtask_index": 0,
+        "agent_outputs": {},
+        "verification_results": {},
+        "final_result": "",
+        "retry_count": 0,
+        "verifier_feedback": "",
+        "prompt_embedding": [],
+        "agent_sequence": [],
+        "manager_quality_scores": {},
+        "manager_skip_flags": {},
+        "agent_retry_counts": {}
+    }
+    assert route_subtasks(state) == "researcher"
+
+def test_route_subtasks_reasoner():
+    state: AgentState = {
+        "task_id": "t1",
+        "prompt": "test",
+        "plugin_name": "default",
+        "subtasks": [
+            {"id": "s1", "assigned_agent": "reasoner"},
+            {"id": "s2", "assigned_agent": "executor"}
+        ],
+        "current_subtask_index": 0,
+        "agent_outputs": {},
+        "verification_results": {},
+        "final_result": "",
+        "retry_count": 0,
+        "verifier_feedback": "",
+        "prompt_embedding": [],
+        "agent_sequence": [],
+        "manager_quality_scores": {},
+        "manager_skip_flags": {},
+        "agent_retry_counts": {}
+    }
+    assert route_subtasks(state) == "reasoner"
+
+def test_route_subtasks_parallel_with_researcher():
+    state: AgentState = {
+        "task_id": "t1",
+        "prompt": "test",
+        "plugin_name": "default",
+        "subtasks": [
+            {"id": "s1", "assigned_agent": "memory_agent"},
+            {"id": "s2", "assigned_agent": "researcher"},
+            {"id": "s3", "assigned_agent": "reasoner"}
+        ],
+        "current_subtask_index": 0,
+        "agent_outputs": {},
+        "verification_results": {},
+        "final_result": "",
+        "retry_count": 0,
+        "verifier_feedback": "",
+        "prompt_embedding": [],
+        "agent_sequence": [],
+        "manager_quality_scores": {},
+        "manager_skip_flags": {},
+        "agent_retry_counts": {}
+    }
+    # 2 consecutive research agents (memory_agent + researcher) -> parallel_research
+    assert route_subtasks(state) == "parallel_research"

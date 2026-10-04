@@ -4,12 +4,14 @@ from typing import List, Dict, Any, Optional
 
 _HAS_NUMPY = False
 try:
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        import numpy as np
-        _dummy = np.dot(np.array([1.0], dtype=np.float32), np.array([1.0], dtype=np.float32))
-        _HAS_NUMPY = True
+    import sys
+    if sys.version_info < (3, 14):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import numpy as np
+            _dummy = np.dot(np.array([1.0], dtype=np.float32), np.array([1.0], dtype=np.float32))
+            _HAS_NUMPY = True
 except Exception:
     _HAS_NUMPY = False
 

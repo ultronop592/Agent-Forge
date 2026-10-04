@@ -27,19 +27,20 @@ def test_calculate_cost_gemini():
 
 
 def test_setup_langsmith_enabled():
-    with patch("backend.app.core.telemetry.settings") as mock_settings:
-        mock_settings.langsmith_tracing = True
-        mock_settings.langsmith_api_key = "lsv2_test_api_key_123"
-        mock_settings.langsmith_project = "AgentForge_Test"
-        mock_settings.langsmith_endpoint = "https://api.smith.langchain.com"
+    with patch.dict(os.environ, {"LANGSMITH_API_KEY": "", "LANGCHAIN_API_KEY": "", "LANGSMITH_TRACING": "", "LANGCHAIN_TRACING_V2": "", "LANGSMITH_PROJECT": "", "LANGCHAIN_PROJECT": ""}, clear=False):
+        with patch("backend.app.core.telemetry.settings") as mock_settings:
+            mock_settings.langsmith_tracing = True
+            mock_settings.langsmith_api_key = "lsv2_test_api_key_123"
+            mock_settings.langsmith_project = "AgentForge_Test"
+            mock_settings.langsmith_endpoint = "https://api.smith.langchain.com"
 
-        setup_langsmith()
+            setup_langsmith()
 
-        assert os.environ.get("LANGCHAIN_TRACING_V2") == "true"
-        assert os.environ.get("LANGSMITH_TRACING") == "true"
-        assert os.environ.get("LANGCHAIN_API_KEY") == "lsv2_test_api_key_123"
-        assert os.environ.get("LANGSMITH_PROJECT") == "AgentForge_Test"
-        assert is_langsmith_enabled() is True
+            assert os.environ.get("LANGCHAIN_TRACING_V2") == "true"
+            assert os.environ.get("LANGSMITH_TRACING") == "true"
+            assert os.environ.get("LANGCHAIN_API_KEY") == "lsv2_test_api_key_123"
+            assert os.environ.get("LANGSMITH_PROJECT") == "AgentForge_Test"
+            assert is_langsmith_enabled() is True
 
 
 def test_setup_langsmith_disabled():
