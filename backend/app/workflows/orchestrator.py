@@ -58,7 +58,7 @@ manager_agent    = ManagerAgent()
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
-def update_subtask_in_db(subtask_id: str, status: str, output: str = None, confidence_score: float = None):
+def update_subtask_in_db(subtask_id: str, status: str, output: str = None, confidence_score: float = None, description: str = None):
     db = SessionLocal()
     try:
         sub = db.query(Subtask).filter(Subtask.id == subtask_id).first()
@@ -68,6 +68,8 @@ def update_subtask_in_db(subtask_id: str, status: str, output: str = None, confi
                 sub.output = output
             if confidence_score is not None:
                 sub.confidence_score = confidence_score
+            if description is not None:
+                sub.description = description
             db.commit()
     except Exception as e:
         logger.error(f"Error updating subtask status: {e}")
@@ -460,7 +462,12 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
     context = _truncate_context(context_full, _EXECUTOR_CONTEXT_CHAR_LIMIT, "Executor")
 
     feedback = state.get("verifier_feedback", "")
-    if feedback:
+    user_steering = state.get("user_steering", "")
+
+    if user_steering:
+        manager_agent.log_db(task_id, subtask_id, "manager_decision",
+            f"👑 [Manager] Prioritizing human operator steering directive for Executor:\n   └─ {user_steering}")
+    elif feedback:
         manager_agent.log_db(task_id, subtask_id, "manager_decision",
             f"📌 [Manager] Passing Verifier correction hint to Executor:\n   └─ {feedback}")
 
@@ -470,7 +477,8 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
         context=context,
         task_id=task_id,
         subtask_id=subtask_id,
-        verifier_feedback=feedback
+        verifier_feedback=feedback,
+        user_steering=user_steering
     )
 
     update_subtask_in_db(subtask_id, "completed", output=output)
@@ -596,20 +604,32 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                     "feedback": result.feedback
                 },
                 "verifier_feedback": "",
+                "user_steering": "",
                 "final_result": result.verified_output,
             }
 
-        effective_feedback = result.feedback
+        # ── Annotate Executor Subtask in DB and State with User Steering ──
         if user_steering:
-            effective_feedback = f"{result.feedback}\n\nUser Steering Guidance: {user_steering}"
+            manager_agent.log_db(
+                task_id, None, "manager_decision",
+                f"🎯 [Manager] Received Human Steering Directive:\n   └─ {user_steering}\nRe-invoking Executor with high-priority guidance."
+            )
+            exec_subs = [s for s in state.get("subtasks", []) if s.get("assigned_agent") == "executor"]
+            if exec_subs:
+                target_sub = exec_subs[-1]
+                updated_desc = f"{target_sub.get('description', '')}\n\n[Human Steering Override]: {user_steering}".strip()
+                target_sub["description"] = updated_desc
+                update_subtask_in_db(target_sub["id"], "running", description=updated_desc)
 
         return {
             "verification_results": {
                 "is_valid":         result.is_valid,
                 "confidence_score": result.confidence_score,
-                "feedback":         effective_feedback
+                "feedback":         result.feedback
             },
-            "verifier_feedback": effective_feedback,
+            "verifier_feedback": result.feedback,
+            "user_steering":     user_steering,
+            "subtasks":          state.get("subtasks", []),
             "retry_count":       retry_count + 1,
         }
 
@@ -663,6 +683,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             "feedback":         result.feedback
         },
         "verifier_feedback": "",
+        "user_steering":     "",
         "final_result":      result.verified_output,
         "agent_sequence":    seq,
     }

@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     final_result: str
     retry_count: int           # Verifier → Executor self-healing retries
     verifier_feedback: str
+    user_steering: str         # First-class Human-in-the-loop steering directive
     prompt_embedding: List[float]  # Cached embedding of the prompt
     agent_sequence: List[str]      # Manager tracks execution order for run summary
     # ── Manager/QA Agent tracking ────────────────────────────────────────

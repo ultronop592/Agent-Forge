@@ -16,7 +16,7 @@ class ExecutorAgent(BaseAgent):
             )
         )
 
-    async def run_subtask(self, subtask_title: str, subtask_desc: str, context: str, task_id: str, subtask_id: str, verifier_feedback: str = "") -> str:
+    async def run_subtask(self, subtask_title: str, subtask_desc: str, context: str, task_id: str, subtask_id: str, verifier_feedback: str = "", user_steering: str = "") -> str:
         # Detect whether this is a coding or business/research task
         task_lower = (subtask_title + " " + subtask_desc).lower()
         is_code_task = any(w in task_lower for w in [
@@ -137,12 +137,29 @@ class ExecutorAgent(BaseAgent):
                 "| Security breach via MCP subprocess | Low | Critical | Containerize all third-party MCP servers |\n"
             )
 
+        if user_steering:
+            mock_execution_output += (
+                f"\n\n---\n"
+                f"## 🎯 Human Steering Directive Applied\n\n"
+                f"> **Operator Directive:** {user_steering}\n\n"
+                f"**Adjustments Incorporated:**\n"
+                f"- Applied user-specified constraints and steering guidance to the deliverable.\n"
+                f"- Re-aligned execution output with human supervisory requirements.\n"
+            )
+
         prompt = (
             f"You have been assigned the subtask: {subtask_title}\n"
             f"Subtask Details: {subtask_desc}\n\n"
             f"Context from prior agents (use as reference, do not repeat verbatim):\n"
             f"{context}\n\n"
         )
+        if user_steering:
+            prompt += (
+                f"👑 MANDATORY HUMAN OPERATOR DIRECTIVE (TOP PRIORITY):\n"
+                f"\"\"\"\n{user_steering}\n\"\"\"\n"
+                f"The human supervisor has provided explicit steering guidance that supersedes previous assumptions or agent critiques. "
+                f"You MUST strictly follow and incorporate this human directive into the deliverable.\n\n"
+            )
         if verifier_feedback:
             prompt += (
                 f"🚨 ATTENTION: A previous output was rejected by the Verifier with the following feedback:\n"
