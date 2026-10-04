@@ -514,11 +514,14 @@ function WorkspaceInner() {
                   </label>
                   <div className="grid grid-cols-2 gap-1.5">
                     {[
-                      { id: "code", label: "💻 Write Code", plugin: "software_debugging", prompt: "Implement a thread-safe Redis token bucket rate limiter in Python adhering to SOLID design principles." },
-                      { id: "research", label: "🔍 Web Research", plugin: "startup_research", prompt: "Search and aggregate AI Developer job openings posted today in India with salary estimates and direct URLs." },
-                      { id: "architecture", label: "🧠 Architecture", plugin: "software_debugging", prompt: "Design an event-driven microservices architecture with idempotency and audit logs." },
-                      { id: "qa", label: "🛡️ Fact-Check QA", plugin: "startup_research", prompt: "Perform a factual compliance and security audit on OAuth2 PKCE flows." }
+                      { id: "code", label: "💻 Code Fix", plugin: "software_debugging", prompt: "Implement a thread-safe Redis token bucket rate limiter in Python adhering to SOLID design principles." },
+                      { id: "code_review", label: "🔍 Code Review", plugin: "code_review", prompt: "Review this high-throughput async FastAPI payment processing pipeline for OWASP Top 10 vulnerabilities, race conditions, and Big-O efficiency." },
+                      { id: "analysis", label: "📊 Deep Analysis", plugin: "general_analysis", prompt: "Perform a multi-perspective empirical tradeoff analysis comparing event-driven microservices versus modular monolith architectures." },
+                      { id: "research", label: "🌐 Market Research", plugin: "startup_research", prompt: "Search and aggregate AI Developer job openings posted today in India with salary estimates and direct URLs." },
+                      { id: "doc_qa", label: "📑 Document QA", plugin: "document_qa", prompt: "Extract key compliance and security requirements from our OAuth2 PKCE specification and cite exact sections." },
+                      { id: "qa", label: "🛡️ Fact-Check QA", plugin: "document_qa", prompt: "Perform a factual compliance and security audit on OAuth2 PKCE flows with zero hallucination." }
                     ].map((mode) => (
+
                       <button
                         key={mode.id}
                         type="button"

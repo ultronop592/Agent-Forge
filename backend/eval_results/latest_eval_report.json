@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-04T16:43:28.244924",
+  "timestamp": "2026-10-04T16:55:08.617392",
   "total_benchmarks": 2,
   "passed_count": 2,
   "failed_count": 0,
@@ -12,7 +12,7 @@
     "technical_quality": 0.92,
     "format_compliance": 0.96
   },
-  "total_latency_seconds": 38.13,
+  "total_latency_seconds": 36.88,
   "total_cost_usd": 0.000267,
   "benchmark_results": [
     {
@@ -50,7 +50,7 @@
           "Include live telemetry performance metrics in system design docs."
         ]
       },
-      "latency_ms": 17693.09809999686,
+      "latency_ms": 16361.274400005641,
       "total_tokens": 451,
       "cost_usd": 0.000135,
       "status": "completed"
@@ -90,7 +90,7 @@
           "Include live telemetry performance metrics in system design docs."
         ]
       },
-      "latency_ms": 18241.601800000353,
+      "latency_ms": 18322.885900000983,
       "total_tokens": 440,
       "cost_usd": 0.000132,
       "status": "completed"

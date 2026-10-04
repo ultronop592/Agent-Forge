@@ -26,6 +26,13 @@ plugin_registry = PluginRegistry()
 # Import plugins to register them
 from backend.app.plugins.software_debug import SoftwareDebugPlugin
 from backend.app.plugins.startup_research import StartupResearchPlugin
+from backend.app.plugins.general_analysis import GeneralAnalysisPlugin
+from backend.app.plugins.document_qa import DocumentQAPlugin
+from backend.app.plugins.code_review import CodeReviewPlugin
 
 plugin_registry.register(SoftwareDebugPlugin())
 plugin_registry.register(StartupResearchPlugin())
+plugin_registry.register(GeneralAnalysisPlugin())
+plugin_registry.register(DocumentQAPlugin())
+plugin_registry.register(CodeReviewPlugin())
+
