@@ -1,9 +1,9 @@
 # 🧪 LLM-as-Judge Benchmark Evaluation Report
 
-**Execution Timestamp:** `2026-10-04T21:26:48.042308`  
+**Execution Timestamp:** `2026-10-05T07:30:53.810865`  
 **Overall Status:** 🟢 PASSED  
 **Pass Rate:** **`100.0%`** (2/2 Passed)  
-**Total Run Latency:** `37.58s`  
+**Total Run Latency:** `38.27s`  
 **Total Evaluation Cost:** `$0.000267 USD`  
 
 ## 📊 Criteria Score Breakdown
@@ -21,5 +21,5 @@
 
 | ID | Title | Category | Overall | Faithfulness | Relevance | Tech Quality | Latency | Cost |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `code_01_lru_cache` | Thread-Safe LRU Cache with TTL Eviction | coding | ✅ **93.0%** | 95% | 93% | 92% | 18.5s | $0.00014 |
-| `code_02_distributed_rate_limiter` | Sliding Window Rate Limiter | coding | ✅ **93.0%** | 95% | 93% | 92% | 16.9s | $0.00013 |
+| `code_01_lru_cache` | Thread-Safe LRU Cache with TTL Eviction | coding | ✅ **93.0%** | 95% | 93% | 92% | 17.4s | $0.00014 |
+| `code_02_distributed_rate_limiter` | Sliding Window Rate Limiter | coding | ✅ **93.0%** | 95% | 93% | 92% | 18.7s | $0.00013 |
