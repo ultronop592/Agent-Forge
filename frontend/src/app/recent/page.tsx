@@ -13,7 +13,10 @@ import {
   CheckCircle2, 
   XCircle, 
   Loader2,
-  ListFilter
+  ListFilter,
+  FileDown,
+  FileText,
+  Archive
 } from "lucide-react";
 
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
@@ -34,6 +37,7 @@ export default function LaunchHistory() {
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   const loadTasks = async () => {
     try {
@@ -71,6 +75,20 @@ export default function LaunchHistory() {
       setDeleteError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleQuickExport = async (taskId: string, format: "md" | "pdf" | "zip", e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (exportingId) return;
+    setExportingId(`${taskId}-${format}`);
+    try {
+      await api.downloadExport(taskId, format);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -245,7 +263,30 @@ export default function LaunchHistory() {
                       </span>
                     </td>
                     <td className="py-3.5 text-right pr-2">
-                      <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {t.status === "completed" && (
+                          <div className="flex items-center gap-1">
+                            {([
+                              { fmt: "md" as const, icon: FileText, title: "Download Markdown" },
+                              { fmt: "pdf" as const, icon: FileDown, title: "Download PDF" },
+                              { fmt: "zip" as const, icon: Archive, title: "Download ZIP" },
+                            ]).map(({ fmt, icon: Icon, title }) => (
+                              <button
+                                key={fmt}
+                                onClick={(e) => handleQuickExport(t.id, fmt, e)}
+                                disabled={!!exportingId}
+                                title={title}
+                                className="p-1.5 rounded-lg text-zinc-500 hover:text-[#da7756] hover:bg-[#da7756]/10 transition disabled:opacity-40 cursor-pointer"
+                              >
+                                {exportingId === `${t.id}-${fmt}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Icon className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <Link 
                           href={`/chat?task_id=${t.id}`}
                           className="text-[#da7756] hover:text-[#e08569] font-semibold group-hover:underline inline-flex items-center gap-1"

@@ -12,7 +12,7 @@ from backend.app.core.telemetry import setup_langsmith
 from backend.app.database.connection import engine, Base, SessionLocal
 from backend.app.database.models import MCPServer
 from backend.app.mcp.client import mcp_manager
-from backend.app.api import tasks, agents, memory, plugins, mcp, evals
+from backend.app.api import tasks, agents, memory, plugins, mcp, evals, export
 
 # Configure logging
 logging.basicConfig(
@@ -73,6 +73,7 @@ app.include_router(memory.router, prefix="/api", dependencies=[Depends(verify_ap
 app.include_router(plugins.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(mcp.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(evals.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(export.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 @app.get("/health")
 def healthcheck():

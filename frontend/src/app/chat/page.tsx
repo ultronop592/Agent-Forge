@@ -15,12 +15,16 @@ import {
   Sparkles, 
   CheckCircle,
   FileDown,
+  FileText,
+  Archive,
   RefreshCcw,
   ListTodo,
   Trash2,
   Copy,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  ChevronDown,
+  FileJson
 } from "lucide-react";
 import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
 import SteeringPanel from "@/components/SteeringPanel";
@@ -82,6 +86,12 @@ function WorkspaceInner() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Export state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Load plugins list on mount
   useEffect(() => {
@@ -98,6 +108,19 @@ function WorkspaceInner() {
     };
     loadPlugins();
   }, []);
+
+  // Close export menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    if (showExportMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showExportMenu]);
 
   // Inspect task if task_id query is present
   useEffect(() => {
@@ -364,7 +387,7 @@ function WorkspaceInner() {
   };
 
   const downloadResult = () => {
-    if (!finalResult) return;
+    if (!finalResult || !taskId) return;
     const blob = new Blob([finalResult], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -373,6 +396,21 @@ function WorkspaceInner() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async (format: "md" | "pdf" | "zip") => {
+    if (!taskId || exportingFormat) return;
+    setExportingFormat(format);
+    setExportError(null);
+    setShowExportMenu(false);
+    try {
+      await api.downloadExport(taskId, format);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportingFormat(null);
+    }
   };
 
   const copyResultToClipboard = () => {
@@ -467,13 +505,64 @@ function WorkspaceInner() {
             </button>
 
             {taskStatus === "completed" && finalResult && (
-              <button 
-                onClick={downloadResult}
-                className="px-4 py-1.5 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-xs font-bold text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <FileDown className="w-3.5 h-3.5" />
-                <span>Export Report</span>
-              </button>
+              <div className="relative" ref={exportDropdownRef}>
+                {/* Export Error Toast */}
+                {exportError && (
+                  <div className="absolute bottom-full mb-2 right-0 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] rounded-lg px-3 py-2 whitespace-nowrap z-50">
+                    ⚠️ {exportError}
+                  </div>
+                )}
+
+                {/* Export Dropdown Button */}
+                <button
+                  onClick={() => { setShowExportMenu(v => !v); setExportError(null); }}
+                  disabled={!!exportingFormat}
+                  className="px-4 py-1.5 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-xs font-bold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {exportingFormat ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Exporting {exportingFormat.toUpperCase()}...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-3.5 h-3.5" />
+                      <span>Export</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                    </>
+                  )}
+                </button>
+
+                {/* Export Options Dropdown Panel */}
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-[#1c1c1f] border border-zinc-700 rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
+                    <div className="px-4 pt-3 pb-2 border-b border-zinc-800">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Export Deliverable As</p>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {([
+                        { fmt: "md" as const, icon: FileText, label: "Markdown (.md)", desc: "Raw text, perfect for GitHub/Notion" },
+                        { fmt: "pdf" as const, icon: FileJson, label: "PDF Document (.pdf)", desc: "Styled report for sharing & printing" },
+                        { fmt: "zip" as const, icon: Archive, label: "Code Archive (.zip)", desc: "Extracted code files + full report" },
+                      ]).map(({ fmt, icon: Icon, label, desc }) => (
+                        <button
+                          key={fmt}
+                          onClick={() => handleExport(fmt)}
+                          className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-zinc-800 transition flex items-start gap-3 group cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[#da7756]/10 border border-[#da7756]/20 text-[#da7756] flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-[#da7756]/20 transition">
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-white">{label}</p>
+                            <p className="text-[10px] text-zinc-500 leading-tight">{desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             <button 

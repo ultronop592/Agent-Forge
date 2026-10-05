@@ -77,6 +77,34 @@ export const api = {
     return `${API_BASE_URL}/tasks/${taskId}/stream`;
   },
 
+  getExportUrl(taskId: string, format: "md" | "pdf" | "zip"): string {
+    return `${API_BASE_URL}/tasks/${taskId}/export?format=${format}`;
+  },
+
+  /** Trigger a file download for the given export format */
+  async downloadExport(taskId: string, format: "md" | "pdf" | "zip"): Promise<void> {
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
+    const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/export?format=${format}`, {
+      headers: apiKey ? { "X-API-Key": apiKey } : {},
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Export failed: ${res.status}`);
+    }
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const filenameMatch = disposition.match(/filename="?([^";]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : `agentforge_export.${format}`;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   // Agents
   async getAgents() {
     return def_fetch("/agents");
