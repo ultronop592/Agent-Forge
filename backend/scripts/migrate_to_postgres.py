@@ -287,8 +287,8 @@ def main():
     )
     parser.add_argument(
         "--target",
-        default=os.environ.get("DATABASE_URL", ""),
-        help="Target PostgreSQL database URL (default: from DATABASE_URL env var)"
+        default=settings.database_url,
+        help="Target PostgreSQL database URL (default: from settings/DATABASE_URL)"
     )
     parser.add_argument(
         "--batch-size",

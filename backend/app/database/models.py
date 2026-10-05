@@ -16,6 +16,8 @@ try:
         - On SQLite: serializes list/array to JSON string to prevent sqlite3.ProgrammingError,
           and deserializes back to list upon retrieval.
         """
+        cache_ok = True
+
         def bind_processor(self, dialect):
             if dialect.name == "postgresql":
                 return super().bind_processor(dialect)

@@ -39,10 +39,11 @@ class MemoryAgent(BaseAgent):
             # Fallback mock embedding in case LLM is disabled/offline
             return [0.1] * 768
         try:
-            # Request embedding vector using Gemini model
+            # Request embedding vector using Gemini model with 768 output dimensions
             response = self.client.models.embed_content(
                 model="models/gemini-embedding-001",
-                contents=text
+                contents=text,
+                config={"output_dimensionality": 768}
             )
             if response and response.embeddings:
                 return response.embeddings[0].values
