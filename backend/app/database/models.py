@@ -4,10 +4,46 @@ from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Tex
 from sqlalchemy.orm import relationship
 from backend.app.database.connection import Base
 
+import json
+
 try:
     from pgvector.sqlalchemy import Vector
+
+    class SafeVector(Vector):
+        """
+        Subclasses pgvector.sqlalchemy.Vector for dual PostgreSQL and SQLite compatibility:
+        - On PostgreSQL: passes through native vector type with <=> operator and HNSW indexing.
+        - On SQLite: serializes list/array to JSON string to prevent sqlite3.ProgrammingError,
+          and deserializes back to list upon retrieval.
+        """
+        def bind_processor(self, dialect):
+            if dialect.name == "postgresql":
+                return super().bind_processor(dialect)
+            def process(value):
+                if value is None:
+                    return None
+                if isinstance(value, (list, tuple)):
+                    return json.dumps(list(value))
+                return str(value)
+            return process
+
+        def result_processor(self, dialect, coltype):
+            if dialect.name == "postgresql":
+                return super().result_processor(dialect, coltype)
+            def process(value):
+                if value is None:
+                    return None
+                if isinstance(value, str):
+                    try:
+                        return json.loads(value)
+                    except Exception:
+                        return value
+                return value
+            return process
+
 except ImportError:
-    Vector = None
+    SafeVector = None
+
 
 def generate_uuid():
     return str(uuid.uuid4())
@@ -151,7 +187,7 @@ class Memory(Base):
     category = Column(String, default="factual")  # factual, semantic, execution_log
     content = Column(Text, nullable=False)
     embedding_searchable_text = Column(Text, nullable=True)  # Simple keywords/text for queries or JSON fallback
-    embedding = Column(Vector(768), nullable=True) if Vector is not None else Column(Text, nullable=True)
+    embedding = Column(SafeVector(768), nullable=True) if SafeVector is not None else Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def to_dict(self):

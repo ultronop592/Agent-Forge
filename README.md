@@ -580,9 +580,47 @@ The stream also emits a ping comment every 15 seconds to prevent proxy idle conn
 
 ---
 
+## Database Architecture & PostgreSQL Migration
+
+AgentForge uses SQLAlchemy ORM with native support for **PostgreSQL with pgvector** in production/Docker, and an automatic fallback to **SQLite** with JSON-serialized vectors for zero-configuration local development.
+
+### Running with PostgreSQL (Recommended for Production)
+
+#### 1. Via Docker Compose (Preconfigured with pgvector)
+```bash
+docker compose up -d postgres
+```
+This spins up PostgreSQL 15 with `pgvector` pre-installed, initializes the persistent volume `postgres_data`, and binds to `localhost:5432`.
+
+#### 2. Via Managed Cloud PostgreSQL (Neon / Supabase / Render / Railway / AWS RDS)
+Set your `DATABASE_URL` in `.env`:
+```env
+DATABASE_URL=postgresql://user:password@ep-host.region.aws.neon.tech/agentforge?sslmode=require
+```
+
+### Migrating Existing Data from SQLite to PostgreSQL
+
+If you have existing tasks, logs, and memories stored in `agentforge.db` and wish to migrate them cleanly to PostgreSQL:
+
+```bash
+# Set your target PostgreSQL connection URL
+export DATABASE_URL=postgresql://agentforge:agentforge_password@localhost:5432/agentforge
+
+# Run the automated migration utility
+python -m backend.scripts.migrate_to_postgres --source sqlite:///./agentforge.db
+```
+
+The migration utility:
+1. Validates source and target database connectivity.
+2. Creates the PostgreSQL `vector` extension and builds all tables in proper foreign-key dependency order (`mcp_servers` → `tasks` → `subtasks` → `agent_logs` → `memories`).
+3. Migrates 768-dimensional vector embeddings into native pgvector columns.
+4. Generates an HNSW vector index (`ix_memories_embedding_hnsw`) for sub-millisecond similarity queries.
+5. Idempotently skips already-migrated records if re-run.
+
+---
+
 ## Database Schema
 
-AgentForge uses SQLAlchemy ORM with support for Neon PostgreSQL in production and SQLite for local development. Schema migration is handled automatically via ensure_db_schema which adds missing columns on startup.
 
 ### Tasks Table
 

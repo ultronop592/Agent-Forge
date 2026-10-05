@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: agentforge_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentforge_password}
+      POSTGRES_DB: ${POSTGRES_DB:-agentforge}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentforge} -d ${POSTGRES_DB:-agentforge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -14,6 +32,11 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-agentforge}:${POSTGRES_PASSWORD:-agentforge_password}@postgres:5432/${POSTGRES_DB:-agentforge}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -25,3 +48,8 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api
     depends_on:
       - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+

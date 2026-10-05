@@ -9,7 +9,7 @@ import uvicorn
 
 from backend.app.core.config import settings
 from backend.app.core.telemetry import setup_langsmith
-from backend.app.database.connection import engine, Base, SessionLocal
+from backend.app.database.connection import engine, Base, SessionLocal, get_database_status
 from backend.app.database.models import MCPServer
 from backend.app.mcp.client import mcp_manager
 from backend.app.api import tasks, agents, memory, plugins, mcp, evals, export
@@ -77,7 +77,14 @@ app.include_router(export.router, prefix="/api", dependencies=[Depends(verify_ap
 
 @app.get("/health")
 def healthcheck():
-    return {"status": "healthy", "database": "connected"}
+    db_status = get_database_status()
+    is_ok = db_status.get("status") == "connected"
+    return {
+        "status": "healthy" if is_ok else "degraded",
+        "database": "connected" if is_ok else "disconnected",
+        "database_details": db_status
+    }
+
 
 
 @app.on_event("startup")

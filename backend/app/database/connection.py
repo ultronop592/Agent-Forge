@@ -2,22 +2,28 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.app.core.config import settings
 
+raw_db_url = settings.database_url or "sqlite:///./agentforge.db"
+# Normalize legacy postgres:// to postgresql:// for SQLAlchemy 1.4+ / 2.0+ compatibility
+if raw_db_url.startswith("postgres://"):
+    raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+
 connect_args = {}
 engine_kwargs = {}
 
 # SQLite specific config
-if settings.database_url.startswith("sqlite"):
+if raw_db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 else:
-    # PostgreSQL / Neon optimization:
-    # Serverless databases aggressively close idle connections. pool_pre_ping tests connection health.
+    # PostgreSQL / Cloud DB optimization:
+    # Connection health check + tuned pool sizes for concurrent agents & SSE streams
     engine_kwargs["pool_pre_ping"] = True
-    engine_kwargs["pool_size"] = 5
-    engine_kwargs["max_overflow"] = 10
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
     engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_timeout"] = 30
 
 engine = create_engine(
-    settings.database_url,
+    raw_db_url,
     connect_args=connect_args,
     **engine_kwargs
 )
@@ -147,5 +153,48 @@ def get_db():
 
 # Auto-migrate newly added telemetry and vector columns
 ensure_db_schema()
+
+
+def get_database_status() -> dict:
+    """Returns connectivity, dialect, pool info, and pgvector extension status."""
+    try:
+        with engine.connect() as conn:
+            dialect = conn.dialect.name
+            pgvector_enabled = False
+            version_str = None
+            if dialect == "postgresql":
+                try:
+                    ver_row = conn.execute(text("SELECT version();")).fetchone()
+                    version_str = ver_row[0].split(",")[0] if ver_row else "PostgreSQL"
+                except Exception:
+                    version_str = "PostgreSQL"
+                try:
+                    ext_row = conn.execute(text("SELECT extname FROM pg_extension WHERE extname = 'vector';")).fetchone()
+                    pgvector_enabled = bool(ext_row)
+                except Exception:
+                    pgvector_enabled = False
+            else:
+                try:
+                    ver_row = conn.execute(text("SELECT sqlite_version();")).fetchone()
+                    version_str = f"SQLite {ver_row[0]}" if ver_row else "SQLite"
+                except Exception:
+                    version_str = "SQLite"
+
+            return {
+                "status": "connected",
+                "dialect": dialect,
+                "version": version_str,
+                "pgvector_enabled": pgvector_enabled,
+                "is_postgres": dialect == "postgresql",
+            }
+    except Exception as e:
+        return {
+            "status": "disconnected",
+            "error": str(e),
+            "dialect": "unknown",
+            "pgvector_enabled": False,
+            "is_postgres": False,
+        }
+
 
 
