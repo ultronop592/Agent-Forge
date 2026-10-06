@@ -949,6 +949,8 @@ All configuration is managed through environment variables. Copy .env.example to
 | ALLOWED_ORIGINS | * | Comma-separated list of allowed CORS origins |
 | HITL_TIMEOUT_SECONDS | 60.0 | Seconds before HITL gates auto-proceed |
 | MCP_SERVERS_JSON | [] | JSON array of MCP server configurations to load at startup |
+| RATE_LIMIT_ENABLED | true | Enable sliding window rate limiting |
+| RATE_LIMIT_PER_MINUTE | 60 | Maximum requests per minute per IP or API key |
 | LANGSMITH_TRACING | false | Enable LangSmith distributed tracing |
 | LANGSMITH_API_KEY | empty | LangSmith API key |
 | LANGSMITH_PROJECT | AgentForge | LangSmith project name for trace grouping |

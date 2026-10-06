@@ -9,6 +9,7 @@ if sys.version_info >= (3, 14):
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_agentforge.db")
 os.environ.setdefault("LANGSMITH_TRACING", "false")
 os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient

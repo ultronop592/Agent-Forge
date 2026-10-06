@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Security & CORS Settings
     allowed_origins: str = Field(default="*", validation_alias="ALLOWED_ORIGINS")
 
+    # Rate Limiting Settings (Phase 3)
+    rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
+    rate_limit_requests_per_minute: int = Field(default=60, validation_alias="RATE_LIMIT_PER_MINUTE")
+
     # LangSmith Observability & Tracing Settings
     langsmith_tracing: bool = Field(default=False, validation_alias="LANGSMITH_TRACING")
     langsmith_api_key: str = Field(default="", validation_alias="LANGSMITH_API_KEY")

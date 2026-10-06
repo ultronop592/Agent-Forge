@@ -56,6 +56,11 @@ def validate_allowed_origins(origins: list) -> Optional[str]:
     return None
 
 
+from backend.app.core.rate_limiter import RateLimitMiddleware, rate_limiter
+
+# Rate Limiting Middleware (Phase 3: 60 requests/min per IP/token)
+app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -97,6 +102,11 @@ async def startup_event():
         logger.warning(cors_warning)
     else:
         logger.info(f"🔒 CORS configured with {len(ALLOWED_ORIGINS)} allowed origin(s): {ALLOWED_ORIGINS}")
+
+    if rate_limiter.enabled:
+        logger.info(f"🛡️ Rate Limiting ENABLED: {rate_limiter.requests_per_minute} req/min per IP/token (Sliding Window)")
+    else:
+        logger.info("🛡️ Rate Limiting DISABLED")
     
     # Load and initialize registered MCP servers from database
     db = SessionLocal()
