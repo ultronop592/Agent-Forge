@@ -1,11 +1,24 @@
 import asyncio
 import time
+import json
 import logging
-from typing import Dict, Any, List, Literal
+from typing import Dict, Any, List, Literal, Optional
 from langgraph.graph import StateGraph, END
 
 from backend.app.workflows.state import AgentState
 from backend.app.workflows.gate_registry import gate_registry
+from backend.app.harness.limits import RunLimits
+from backend.app.harness.errors import BudgetExceeded
+from backend.app.harness.permissions import build_tool_allowlist
+from backend.app.harness.harness import (
+    AgentHarness,
+    get_current_harness,
+    set_current_harness,
+    register_harness,
+    unregister_harness,
+    get_harness_for_task,
+)
+from backend.app.core.stream import token_stream_manager
 from backend.app.agents.planner import PlannerAgent
 from backend.app.agents.analyst_agent import AnalystAgent
 from backend.app.agents.researcher import ResearcherAgent
@@ -125,6 +138,10 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     prompt      = state["prompt"]
     plugin_name = state.get("plugin_name", "default")
 
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("planner")
+
     update_task_in_db(task_id, "running")
 
     manager_agent.log_db(task_id, None, "manager_decision",
@@ -236,6 +253,9 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
 
 async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
     task_id = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("parallel_research")
     subtasks = state["subtasks"]
     idx = state["current_subtask_index"]
 
@@ -317,6 +337,9 @@ async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
 
 async def memory_node(state: AgentState) -> Dict[str, Any]:
     task_id    = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("memory_agent")
     idx        = state["current_subtask_index"]
     subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
@@ -349,6 +372,9 @@ async def memory_node(state: AgentState) -> Dict[str, Any]:
 
 async def analyst_node(state: AgentState) -> Dict[str, Any]:
     task_id    = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("analyst")
     idx        = state["current_subtask_index"]
     subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
@@ -380,6 +406,9 @@ async def analyst_node(state: AgentState) -> Dict[str, Any]:
 
 async def researcher_node(state: AgentState) -> Dict[str, Any]:
     task_id    = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("researcher")
     idx        = state["current_subtask_index"]
     subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
@@ -410,6 +439,9 @@ async def researcher_node(state: AgentState) -> Dict[str, Any]:
 
 async def reasoner_node(state: AgentState) -> Dict[str, Any]:
     task_id    = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("reasoner")
     idx        = state["current_subtask_index"]
     subtask    = state["subtasks"][idx]
     subtask_id = subtask["id"]
@@ -449,6 +481,9 @@ async def reasoner_node(state: AgentState) -> Dict[str, Any]:
 
 async def executor_node(state: AgentState) -> Dict[str, Any]:
     task_id = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("executor")
     idx     = state["current_subtask_index"]
 
     if idx >= len(state["subtasks"]):
@@ -508,6 +543,9 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
 
 async def verifier_node(state: AgentState) -> Dict[str, Any]:
     task_id     = state["task_id"]
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    if harness:
+        harness.before_step("verifier")
     prompt      = state["prompt"]
     retry_count = state.get("retry_count", 0)
 
@@ -807,3 +845,102 @@ builder.add_conditional_edges(
 )
 
 orchestrator_graph = builder.compile()
+
+
+async def run_task_pipeline(
+    task_id: str,
+    prompt: str,
+    plugin_name: str = "default",
+    harness: Optional[AgentHarness] = None,
+) -> Optional[AgentState]:
+    if harness is None:
+        plugin = None
+        try:
+            from backend.app.api.plugins import get_plugin_by_name
+            plugin = get_plugin_by_name(plugin_name)
+        except Exception:
+            pass
+        allowlist = build_tool_allowlist(plugin)
+        harness = AgentHarness(limits=RunLimits.from_config(), tool_allowlist=allowlist, task_id=task_id)
+
+    set_current_harness(harness)
+    register_harness(task_id, harness)
+
+    initial_state: AgentState = {
+        "task_id": task_id,
+        "prompt": prompt,
+        "plugin_name": plugin_name,
+        "subtasks": [],
+        "current_subtask_index": 0,
+        "agent_outputs": {},
+        "verification_results": {},
+        "final_result": "",
+        "retry_count": 0,
+        "verifier_feedback": "",
+        "user_steering": "",
+        "prompt_embedding": [],
+        "agent_sequence": [],
+        "manager_quality_scores": {},
+        "manager_skip_flags": {},
+        "agent_retry_counts": {},
+    }
+
+    try:
+        result = await orchestrator_graph.ainvoke(initial_state)
+        return result
+    except BudgetExceeded as exc:
+        snap = harness.snapshot()
+        failure_payload = json.dumps({"reason_code": exc.reason_code, "harness": snap})
+
+        db = SessionLocal()
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task:
+                task.status = "failed"
+                task.failure_reason = failure_payload
+                db.commit()
+
+            manager_log = AgentLog(
+                task_id=task_id,
+                agent_name="Manager",
+                log_type="manager_decision",
+                content=f"Execution halted: Budget exceeded ({exc.reason_code}). Limits: {json.dumps(snap)}",
+            )
+            db.add(manager_log)
+            db.commit()
+        finally:
+            db.close()
+
+        try:
+            await token_stream_manager.publish_token(
+                task_id=task_id,
+                agent_name="System",
+                chunk=f"\n[Budget Exceeded: {exc.reason_code}]\n",
+            )
+        except Exception:
+            pass
+
+        return None
+    except Exception as exc:
+        db = SessionLocal()
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task:
+                task.status = "failed"
+                task.final_result = f"Orchestrator error: {str(exc)}"
+                db.commit()
+            err_log = AgentLog(
+                task_id=task_id,
+                agent_name="System",
+                log_type="error",
+                content=f"Workflow execution failed: {str(exc)}",
+            )
+            db.add(err_log)
+            db.commit()
+        finally:
+            db.close()
+        return None
+    finally:
+        set_current_harness(None)
+        unregister_harness(task_id)
+

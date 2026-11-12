@@ -113,11 +113,12 @@ def test_harness_record_and_snapshot() -> None:
 
 @pytest.mark.asyncio
 async def test_reject_cancels_running_asyncio_task(db_session: Any) -> None:
+    import uuid
     from backend.app.database.models import Task
     from backend.app.workflows.task_registry import task_registry
     from backend.app.api.tasks import reject_task, RejectPayload
 
-    task_id = "test-task-cancel-id"
+    task_id = f"test-task-cancel-{uuid.uuid4().hex[:8]}"
     db_task = Task(id=task_id, prompt="Test cancel", plugin_name="default", status="running")
     db_session.add(db_task)
     db_session.commit()
@@ -160,5 +161,93 @@ def test_task_model_failure_reason_field() -> None:
     t = Task(prompt="Fail test", plugin_name="default", status="failed", failure_reason='{"reason_code": "max_cost_usd"}')
     d = t.to_dict()
     assert d["failure_reason"] == '{"reason_code": "max_cost_usd"}'
+
+
+@pytest.mark.asyncio
+async def test_task_exceeding_max_cost_usd_fails_with_failure_reason(db_session: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uuid
+    from backend.app.database.models import Task
+    from backend.app.workflows.orchestrator import run_task_pipeline
+    from backend.app.agents.planner import PlannerAgent, PlanResponse, SubtaskPlan
+
+    task_id = f"test-cost-limit-{uuid.uuid4().hex[:8]}"
+    t = Task(id=task_id, prompt="Cost test", plugin_name="default", status="pending")
+    db_session.add(t)
+    db_session.commit()
+
+    limits = RunLimits(max_cost_usd=0.01)
+    harness = AgentHarness(limits=limits, task_id=task_id)
+
+    async def mock_create_plan(self: Any, prompt: str, task_id: str, plugin_name: str = "default") -> PlanResponse:
+        harness.record(tokens=1000, cost_usd=0.05)
+        return PlanResponse(
+            subtasks=[SubtaskPlan(title="T1", description="D1", assigned_agent="executor")],
+            reasoning="R",
+        )
+
+    monkeypatch.setattr(PlannerAgent, "create_plan", mock_create_plan)
+    monkeypatch.setattr("backend.app.core.config.settings.hitl_timeout_seconds", 0.01)
+
+    await run_task_pipeline(task_id, "Cost test", "default", harness=harness)
+
+    db_session.expire_all()
+    failed_task = db_session.query(Task).filter(Task.id == task_id).first()
+    assert failed_task is not None
+    assert failed_task.status == "failed"
+    assert failed_task.failure_reason is not None
+    assert "max_cost_usd" in failed_task.failure_reason
+
+
+@pytest.mark.asyncio
+async def test_retry_loop_cannot_exceed_max_steps(db_session: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uuid
+    from backend.app.database.models import Task
+    from backend.app.workflows.orchestrator import run_task_pipeline
+    from backend.app.agents.planner import PlannerAgent, PlanResponse, SubtaskPlan
+    from backend.app.agents.executor import ExecutorAgent
+    from backend.app.agents.verifier import VerifierAgent, VerificationResponse
+
+    task_id = f"test-retry-steps-{uuid.uuid4().hex[:8]}"
+    t = Task(id=task_id, prompt="Retry test", plugin_name="default", status="pending")
+    db_session.add(t)
+    db_session.commit()
+
+    limits = RunLimits(max_steps=3)
+    harness = AgentHarness(limits=limits, task_id=task_id)
+
+    async def mock_create_plan(self: Any, prompt: str, task_id: str, plugin_name: str = "default") -> PlanResponse:
+        return PlanResponse(
+            subtasks=[SubtaskPlan(title="Execute subtask", description="desc", assigned_agent="executor")],
+            reasoning="Plan",
+        )
+
+    async def mock_run_executor(self: Any, *args: Any, **kwargs: Any) -> str:
+        return "Exec output"
+
+    async def mock_verify(self: Any, *args: Any, **kwargs: Any) -> VerificationResponse:
+        return VerificationResponse(
+            is_valid=False,
+            confidence_score=0.40,
+            feedback="Needs fix",
+            verified_output="Failed output",
+            faithfulness_score=0.40,
+            relevance_score=0.40,
+            technical_score=0.40,
+        )
+
+    monkeypatch.setattr(PlannerAgent, "create_plan", mock_create_plan)
+    monkeypatch.setattr(ExecutorAgent, "run_subtask", mock_run_executor)
+    monkeypatch.setattr(VerifierAgent, "verify_output", mock_verify)
+    monkeypatch.setattr("backend.app.core.config.settings.hitl_timeout_seconds", 0.01)
+
+    await run_task_pipeline(task_id, "Retry test", "default", harness=harness)
+
+    db_session.expire_all()
+    failed_task = db_session.query(Task).filter(Task.id == task_id).first()
+    assert failed_task is not None
+    assert failed_task.status == "failed"
+    assert failed_task.failure_reason is not None
+    assert "max_steps" in failed_task.failure_reason
+
 
 

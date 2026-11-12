@@ -9,10 +9,11 @@ from backend.app.core.config import settings
 from backend.app.core.stream import token_stream_manager
 from backend.app.database.connection import get_db, SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
-from backend.app.workflows.orchestrator import orchestrator_graph
+from backend.app.workflows.orchestrator import orchestrator_graph, run_task_pipeline
 from backend.app.workflows.state import AgentState
 from backend.app.workflows.gate_registry import gate_registry
 from backend.app.workflows.task_registry import task_registry
+from backend.app.harness.harness import get_harness_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -41,25 +42,7 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str) -> Non
     if current_async_task:
         task_registry.register(task_id, current_async_task)
     try:
-        initial_state: AgentState = {
-            "task_id": task_id,
-            "prompt": prompt,
-            "plugin_name": plugin_name,
-            "subtasks": [],
-            "current_subtask_index": 0,
-            "agent_outputs": {},
-            "verification_results": {},
-            "final_result": "",
-            "retry_count": 0,
-            "verifier_feedback": "",
-            "user_steering": "",
-            "prompt_embedding": [],
-            "agent_sequence": [],
-            "manager_quality_scores": {},
-            "manager_skip_flags": {},
-            "agent_retry_counts": {},
-        }
-        await orchestrator_graph.ainvoke(initial_state)
+        await run_task_pipeline(task_id, prompt, plugin_name)
     except asyncio.CancelledError:
         logger.info(f"Task {task_id} execution cancelled.")
         raise
@@ -344,25 +327,41 @@ async def stream_task_updates(task_id: str, request: Request = None):
                                     if new_logs:
                                         last_log_id = new_logs[-1].id
 
+                                    harness = get_harness_for_task(task_id)
+                                    harness_data = harness.snapshot() if harness else None
+                                    if not harness_data and task.failure_reason:
+                                        try:
+                                            parsed = json.loads(task.failure_reason)
+                                            harness_data = parsed.get("harness")
+                                        except Exception:
+                                            pass
+
                                     payload = {
-                                        "task_id":      task_id,
-                                        "status":       task.status,
-                                        "final_result": task.final_result,
-                                        "subtasks":     subs_data,
-                                        "new_logs":     [l.to_dict() for l in new_logs],
+                                        "task_id":        task_id,
+                                        "status":         task.status,
+                                        "final_result":   task.final_result,
+                                        "failure_reason": task.failure_reason,
+                                        "subtasks":       subs_data,
+                                        "new_logs":       [l.to_dict() for l in new_logs],
+                                        "harness":        harness_data,
                                     }
                                     yield f"data: {json.dumps(payload)}\n\n"
 
-                                    # Emit discrete SSE events for frontend listeners
                                     for l in new_logs:
                                         yield f"data: {json.dumps({'event': 'log', 'data': l.to_dict()})}\n\n"
                                     if status_changed:
                                         yield f"data: {json.dumps({'event': 'status_change', 'data': {'status': task.status}})}\n\n"
 
-                                # ── Terminal condition ───────────────────────────────────
                                 if task.status in ("completed", "failed", "cancelled"):
-                                    # Send one final done event so the client knows cleanly
-                                    yield f"data: {json.dumps({'done': True, 'status': task.status})}\n\n"
+                                    harness = get_harness_for_task(task_id)
+                                    harness_data = harness.snapshot() if harness else None
+                                    if not harness_data and task.failure_reason:
+                                        try:
+                                            parsed = json.loads(task.failure_reason)
+                                            harness_data = parsed.get("harness")
+                                        except Exception:
+                                            pass
+                                    yield f"data: {json.dumps({'done': True, 'status': task.status, 'failure_reason': task.failure_reason, 'harness': harness_data})}\n\n"
                                     break
 
                             finally:

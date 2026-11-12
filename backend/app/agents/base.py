@@ -14,6 +14,7 @@ from backend.app.core.telemetry import calculate_cost, agent_traceable
 from backend.app.core.stream import token_stream_manager
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import AgentLog
+from backend.app.harness.harness import get_current_harness, get_harness_for_task
 
 logger = logging.getLogger("agentforge.agents")
 logger.setLevel(logging.INFO)
@@ -186,6 +187,9 @@ class BaseAgent:
                 latency_ms=elapsed_ms,
                 cost_usd=cost
             )
+            harness = get_current_harness() or (get_harness_for_task(task_id) if task_id else None)
+            if harness:
+                harness.record(tot_tokens, cost)
             return res_content
 
         try:
@@ -248,6 +252,9 @@ class BaseAgent:
                         latency_ms=elapsed_ms,
                         cost_usd=cost_usd
                     )
+                    harness = get_current_harness() or (get_harness_for_task(task_id) if task_id else None)
+                    if harness:
+                        harness.record(total_tokens, cost_usd)
 
                     # Surface high-signal telemetry log for Thinking Console display
                     self.log_db(
