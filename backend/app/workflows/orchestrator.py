@@ -290,7 +290,7 @@ async def parallel_research_node(state: AgentState) -> Dict[str, Any]:
 
     for sub_id, output, embedding, agent_name in results:
         outputs[sub_id] = output
-        if embedding:
+        if embedding and len(embedding) == 768:
             prompt_emb = embedding
         new_seq.append(agent_name)
 
@@ -633,8 +633,9 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
             "retry_count":       retry_count + 1,
         }
 
-    # ── Task complete: Store rich memory with cached embedding ───────────
     prompt_emb = state.get("prompt_embedding", None)
+    if prompt_emb is not None and (len(prompt_emb) != 768 or not any(prompt_emb)):
+        prompt_emb = None
 
     # Determine topic category dynamically
     prompt_lower = prompt.lower()

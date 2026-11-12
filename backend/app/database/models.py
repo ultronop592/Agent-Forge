@@ -1,5 +1,6 @@
 from datetime import datetime
 import uuid
+from typing import Dict, Any, Optional, List, Callable
 from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from backend.app.database.connection import Base
@@ -10,18 +11,12 @@ try:
     from pgvector.sqlalchemy import Vector
 
     class SafeVector(Vector):
-        """
-        Subclasses pgvector.sqlalchemy.Vector for dual PostgreSQL and SQLite compatibility:
-        - On PostgreSQL: passes through native vector type with <=> operator and HNSW indexing.
-        - On SQLite: serializes list/array to JSON string to prevent sqlite3.ProgrammingError,
-          and deserializes back to list upon retrieval.
-        """
         cache_ok = True
 
-        def bind_processor(self, dialect):
+        def bind_processor(self, dialect: Any) -> Optional[Callable[[Any], Any]]:
             if dialect.name == "postgresql":
                 return super().bind_processor(dialect)
-            def process(value):
+            def process(value: Any) -> Optional[str]:
                 if value is None:
                     return None
                 if isinstance(value, (list, tuple)):
@@ -29,10 +24,10 @@ try:
                 return str(value)
             return process
 
-        def result_processor(self, dialect, coltype):
+        def result_processor(self, dialect: Any, coltype: Any) -> Optional[Callable[[Any], Any]]:
             if dialect.name == "postgresql":
                 return super().result_processor(dialect, coltype)
-            def process(value):
+            def process(value: Any) -> Any:
                 if value is None:
                     return None
                 if isinstance(value, str):
@@ -47,7 +42,7 @@ except ImportError:
     SafeVector = None
 
 
-def generate_uuid():
+def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 class Task(Base):
@@ -67,7 +62,7 @@ class Task(Base):
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
     logs = relationship("AgentLog", back_populates="task", cascade="all, delete-orphan")
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         scores = [s.confidence_score for s in self.subtasks if s.confidence_score and s.confidence_score > 0] if self.subtasks else []
         conf = max(scores) if scores else (0.95 if self.status == "completed" else 0.0)
         
@@ -133,7 +128,7 @@ class Subtask(Base):
     task = relationship("Task", back_populates="subtasks")
     logs = relationship("AgentLog", back_populates="subtask", cascade="all, delete-orphan")
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "task_id": self.task_id,
@@ -166,7 +161,7 @@ class AgentLog(Base):
     task = relationship("Task", back_populates="logs")
     subtask = relationship("Subtask", back_populates="logs")
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "task_id": self.task_id,
@@ -192,7 +187,7 @@ class Memory(Base):
     embedding = Column(SafeVector(768), nullable=True) if SafeVector is not None else Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         emb_val = None
         if self.embedding is not None:
             if hasattr(self.embedding, "tolist"):
@@ -222,7 +217,7 @@ class MCPServer(Base):
     url = Column(String, nullable=True)  # For SSE transport
     is_active = Column(Boolean, default=True)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,

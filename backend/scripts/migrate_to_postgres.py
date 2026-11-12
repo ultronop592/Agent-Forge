@@ -14,6 +14,7 @@ Or set the TARGET via environment variable:
 
 import sys
 import os
+import json
 import argparse
 import logging
 from typing import Dict, Any
@@ -34,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger("db_migration")
 
 
-def get_engine_for_url(url: str):
+def get_engine_for_url(url: str) -> Any:
     """Creates an engine with proper parameters depending on dialect."""
     # Normalize postgres:// to postgresql://
     if url.startswith("postgres://"):
@@ -222,21 +223,51 @@ def migrate_data(source_url: str, target_url: str, batch_size: int = 200) -> boo
             counts["agent_logs"]["migrated"] += len(batch)
         logger.info(f"   Agent Logs: {counts['agent_logs']['migrated']} migrated, {counts['agent_logs']['skipped']} existing.")
 
-        # 5. Memories (Vector Data)
         logger.info("\n[5/5] Migrating Memories & Vector Embeddings...")
+        from backend.app.agents.memory_agent import MemoryAgent
+        mem_agent = MemoryAgent()
         mems = src_db.query(Memory).all()
         counts["memories"]["source"] = len(mems)
         for m in mems:
             exists = tgt_db.query(Memory).filter(Memory.id == m.id).first()
             if not exists:
-                tgt_db.add(Memory(
-                    id=m.id,
-                    category=m.category,
-                    content=m.content,
-                    embedding_searchable_text=m.embedding_searchable_text,
-                    embedding=m.embedding,
-                    created_at=m.created_at
-                ))
+                emb = m.embedding
+                if hasattr(emb, "tolist"):
+                    emb = emb.tolist()
+                elif isinstance(emb, (list, tuple)):
+                    emb = list(emb)
+                elif isinstance(emb, str):
+                    try:
+                        emb = json.loads(emb)
+                    except Exception:
+                        emb = None
+                if emb is None and m.embedding_searchable_text:
+                    try:
+                        emb = json.loads(m.embedding_searchable_text)
+                    except Exception:
+                        emb = None
+
+                if emb is not None and len(emb) == 3072:
+                    new_emb = mem_agent.get_embedding(m.content)
+                    emb_json = json.dumps(new_emb)
+                    tgt_db.add(Memory(
+                        id=m.id,
+                        category=m.category,
+                        content=m.content,
+                        embedding_searchable_text=emb_json,
+                        embedding=new_emb,
+                        created_at=m.created_at
+                    ))
+                else:
+                    norm_emb = mem_agent._normalize_vector(emb) if emb else None
+                    tgt_db.add(Memory(
+                        id=m.id,
+                        category=m.category,
+                        content=m.content,
+                        embedding_searchable_text=json.dumps(norm_emb) if norm_emb else m.embedding_searchable_text,
+                        embedding=norm_emb if norm_emb else m.embedding,
+                        created_at=m.created_at
+                    ))
                 counts["memories"]["migrated"] += 1
             else:
                 counts["memories"]["skipped"] += 1
@@ -278,7 +309,7 @@ def migrate_data(source_url: str, target_url: str, batch_size: int = 200) -> boo
         tgt_db.close()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="AgentForge SQLite to PostgreSQL Migration CLI")
     parser.add_argument(
         "--source",

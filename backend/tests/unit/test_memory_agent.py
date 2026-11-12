@@ -23,7 +23,7 @@ def test_cosine_similarity_mismatched_length():
     agent = MemoryAgent()
     assert agent._cosine_similarity([1.0, 2.0], [1.0]) == 0.0
 
-def test_store_memory_populates_embedding_and_text():
+def test_store_memory_populates_embedding_and_text() -> None:
     agent = MemoryAgent()
     test_vec = [0.25] * 768
     result = agent.store_memory(
@@ -36,7 +36,15 @@ def test_store_memory_populates_embedding_and_text():
     assert result["content"] == "Pgvector enables 100x fast vector indexing in PostgreSQL"
     assert result["embedding"] is not None
     assert len(result["embedding"]) == 768
+    assert abs(sum(x * x for x in result["embedding"]) - 1.0) < 1e-4
     assert result["embedding_searchable_text"] is not None
+
+
+def test_get_embedding_768_dimensions_and_normalized() -> None:
+    agent = MemoryAgent()
+    vec = agent.get_embedding("Test prompt text")
+    assert len(vec) == 768
+    assert abs(sum(x * x for x in vec) - 1.0) < 1e-4
 
 def test_retrieve_memories_similarity_ranking():
     agent = MemoryAgent()

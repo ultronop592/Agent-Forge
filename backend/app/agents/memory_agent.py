@@ -34,23 +34,27 @@ class MemoryAgent(BaseAgent):
             )
         )
 
+    def _normalize_vector(self, v: List[float]) -> List[float]:
+        norm = sum(x * x for x in v) ** 0.5
+        if norm == 0.0:
+            return v
+        return [x / norm for x in v]
+
     def get_embedding(self, text: str) -> List[float]:
         if not self.has_llm:
-            # Fallback mock embedding in case LLM is disabled/offline
-            return [0.1] * 768
+            return self._normalize_vector([0.1] * 768)
         try:
-            # Request embedding vector using Gemini model with 768 output dimensions
             response = self.client.models.embed_content(
                 model="models/gemini-embedding-001",
                 contents=text,
                 config={"output_dimensionality": 768}
             )
             if response and response.embeddings:
-                return response.embeddings[0].values
-            return [0.1] * 768
+                return self._normalize_vector(response.embeddings[0].values)
+            return self._normalize_vector([0.1] * 768)
         except Exception as e:
             logger.error(f"Failed to generate embedding via API: {e}")
-            return [0.1] * 768
+            return self._normalize_vector([0.1] * 768)
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
         if len(a) != len(b):
@@ -86,10 +90,8 @@ class MemoryAgent(BaseAgent):
     ) -> tuple[List[Dict[str, Any]], List[float]]:
         db = SessionLocal()
         try:
-            # 1. Fetch query vector using Gemini embedding
-            query_vector = self.get_embedding(query)
+            query_vector = self._normalize_vector(self.get_embedding(query))
 
-            # Determine whether database dialect supports native pgvector (<=>)
             is_sqlite = False
             try:
                 if db.bind:
@@ -97,7 +99,6 @@ class MemoryAgent(BaseAgent):
             except Exception:
                 is_sqlite = True
 
-            # 2. Native indexed pgvector search on PostgreSQL
             if not is_sqlite and hasattr(Memory, "embedding"):
                 try:
                     dist_expr = Memory.embedding.cosine_distance(query_vector)
@@ -107,7 +108,6 @@ class MemoryAgent(BaseAgent):
                     if category and category.strip() and category.strip().lower() != "all":
                         q = q.filter(Memory.category == category.strip())
 
-                    # Filter by minimum cosine similarity (distance <= 1 - min_score)
                     q = q.filter(dist_expr <= (1.0 - min_score))
                     q = q.order_by(dist_expr.asc()).limit(top_k)
 
@@ -124,7 +124,6 @@ class MemoryAgent(BaseAgent):
                 except Exception as pg_err:
                     logger.warning(f"Native pgvector query failed, falling back to Python scan: {pg_err}")
 
-            # 3. Fallback: in-Python scan (SQLite, missing extension, or keyword fallback)
             db_query = db.query(Memory)
             if category and category.strip() and category.strip().lower() != "all":
                 db_query = db_query.filter(Memory.category == category)
@@ -136,18 +135,16 @@ class MemoryAgent(BaseAgent):
                 score = 0.0
                 content_lower = mem.content.lower()
 
-                # Vector Cosine Similarity Search: check mem.embedding or JSON string
                 if mem.embedding is not None and isinstance(mem.embedding, (list, tuple)) and len(mem.embedding) > 0:
-                    score = self._cosine_similarity(query_vector, list(mem.embedding))
+                    score = self._cosine_similarity(query_vector, self._normalize_vector(list(mem.embedding)))
                 elif mem.embedding_searchable_text:
                     try:
                         vector = json.loads(mem.embedding_searchable_text)
                         if isinstance(vector, list) and len(vector) > 0 and isinstance(vector[0], (int, float)):
-                            score = self._cosine_similarity(query_vector, vector)
+                            score = self._cosine_similarity(query_vector, self._normalize_vector(vector))
                     except Exception:
                         score = 0.0
 
-                # Fallback: keyword matching if no vector match
                 if score < 0.10:
                     words = query.lower().split()
                     word_matches = sum(1 for w in words if len(w) > 3 and w in content_lower)
@@ -160,7 +157,6 @@ class MemoryAgent(BaseAgent):
                     mem_dict["match_percentage"] = f"{int(round(score * 100))}%"
                     results.append((score, mem_dict))
 
-            # Sort by search score descending
             results.sort(key=lambda x: x[0], reverse=True)
             top_memories = [item[1] for item in results[:top_k]]
             return top_memories, query_vector
@@ -168,7 +164,7 @@ class MemoryAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Memory recall error: {e}")
             self.log_db("SYSTEM", None, "error", f"Memory recall error: {str(e)}")
-            return [], [0.1] * 768
+            return [], self._normalize_vector([0.1] * 768)
         finally:
             db.close()
 
@@ -180,9 +176,8 @@ class MemoryAgent(BaseAgent):
     ) -> Dict[str, Any]:
         db = SessionLocal()
         try:
-            # Re-use pre-computed embedding if available, avoiding an extra API call
-            if embedding is not None and len(embedding) > 0:
-                embedding_vector = embedding
+            if embedding is not None and len(embedding) == 768:
+                embedding_vector = self._normalize_vector(embedding)
             else:
                 embedding_vector = self.get_embedding(content)
 
