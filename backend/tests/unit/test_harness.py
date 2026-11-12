@@ -1,4 +1,5 @@
 import time
+import asyncio
 import pytest
 from typing import List, Dict, Any
 from backend.app.harness.limits import RunLimits
@@ -108,3 +109,56 @@ def test_harness_record_and_snapshot() -> None:
     assert snap["max_tokens"] == 10000
     assert snap["elapsed_seconds"] >= 0.0
     assert snap["max_seconds"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_reject_cancels_running_asyncio_task(db_session: Any) -> None:
+    from backend.app.database.models import Task
+    from backend.app.workflows.task_registry import task_registry
+    from backend.app.api.tasks import reject_task, RejectPayload
+
+    task_id = "test-task-cancel-id"
+    db_task = Task(id=task_id, prompt="Test cancel", plugin_name="default", status="running")
+    db_session.add(db_task)
+    db_session.commit()
+
+    async def long_running_coro() -> None:
+        await asyncio.sleep(100.0)
+
+    bg_task = asyncio.create_task(long_running_coro())
+    task_registry.register(task_id, bg_task)
+
+    try:
+        res = reject_task(task_id=task_id, payload=RejectPayload(reason="User abort"), db=db_session)
+        assert res["status"] == "cancelled"
+        assert bg_task.cancelled() or bg_task.cancelling() > 0
+        with pytest.raises(asyncio.CancelledError):
+            await bg_task
+    finally:
+        task_registry.unregister(task_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_tool_authorization() -> None:
+    from backend.app.harness.harness import set_current_harness
+    from backend.app.mcp.client import mcp_manager
+
+    harness = AgentHarness()
+    set_current_harness(harness)
+    try:
+        with pytest.raises(ToolDenied) as exc:
+            await mcp_manager.call_tool("test_server", "unauthorized_tool", {}, agent_name="executor")
+        assert exc.value.agent_name == "executor"
+        assert exc.value.tool_name == "unauthorized_tool"
+    finally:
+        set_current_harness(None)
+
+
+def test_task_model_failure_reason_field() -> None:
+    from backend.app.database.models import Task
+
+    t = Task(prompt="Fail test", plugin_name="default", status="failed", failure_reason='{"reason_code": "max_cost_usd"}')
+    d = t.to_dict()
+    assert d["failure_reason"] == '{"reason_code": "max_cost_usd"}'
+
+

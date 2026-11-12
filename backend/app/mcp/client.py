@@ -4,6 +4,7 @@ import logging
 import sys
 import uuid
 from typing import Dict, List, Any, Optional
+from backend.app.harness.harness import get_current_harness
 
 logger = logging.getLogger("agentforge.mcp")
 logger.setLevel(logging.INFO)
@@ -195,7 +196,10 @@ class MCPManager:
                     all_tools.append(enriched_tool)
         return all_tools
 
-    async def call_tool(self, server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, server_name: str, tool_name: str, arguments: Dict[str, Any], agent_name: str = "executor") -> Dict[str, Any]:
+        harness = get_current_harness()
+        if harness:
+            harness.authorize(agent_name, tool_name)
         if server_name not in self.clients:
             return {"content": [{"type": "text", "text": f"MCP server '{server_name}' not registered."}], "isError": True}
         return await self.clients[server_name].call_tool(tool_name, arguments)

@@ -7,6 +7,8 @@ from typing import List, Dict, Any, Optional
 from backend.app.database.connection import get_db
 from backend.app.database.models import MCPServer
 from backend.app.mcp.client import mcp_manager
+from backend.app.harness.errors import ToolDenied
+from backend.app.harness.harness import get_current_harness
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
@@ -86,14 +88,19 @@ def list_tools():
     return mcp_manager.get_all_tools()
 
 @router.post("/tools/call")
-async def call_mcp_tool(payload: ToolCallPayload):
+async def call_mcp_tool(payload: ToolCallPayload) -> Dict[str, Any]:
+    harness = get_current_harness()
+    if harness:
+        harness.authorize("executor", payload.tool_name)
     try:
-        # Route execution to correct sub-client
         res = await mcp_manager.call_tool(
             server_name=payload.server_name,
             tool_name=payload.tool_name,
-            arguments=payload.arguments
+            arguments=payload.arguments,
+            agent_name="executor",
         )
         return res
+    except ToolDenied:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

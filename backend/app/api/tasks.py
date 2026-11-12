@@ -12,6 +12,7 @@ from backend.app.database.models import Task, Subtask, AgentLog
 from backend.app.workflows.orchestrator import orchestrator_graph
 from backend.app.workflows.state import AgentState
 from backend.app.workflows.gate_registry import gate_registry
+from backend.app.workflows.task_registry import task_registry
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -35,7 +36,10 @@ class SteerPayload(BaseModel):
 class RejectPayload(BaseModel):
     reason: str = ""
 
-async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
+async def run_workflow_async(task_id: str, prompt: str, plugin_name: str) -> None:
+    current_async_task = asyncio.current_task()
+    if current_async_task:
+        task_registry.register(task_id, current_async_task)
     try:
         initial_state: AgentState = {
             "task_id": task_id,
@@ -50,17 +54,16 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
             "verifier_feedback": "",
             "user_steering": "",
             "prompt_embedding": [],
-            "agent_sequence": [],           # Manager populates this as agents run
-            # ── Manager Agent tracking ────────────────────────────────
+            "agent_sequence": [],
             "manager_quality_scores": {},
             "manager_skip_flags": {},
             "agent_retry_counts": {},
         }
-        
-        # Invoke the compiled LangGraph flow
         await orchestrator_graph.ainvoke(initial_state)
+    except asyncio.CancelledError:
+        logger.info(f"Task {task_id} execution cancelled.")
+        raise
     except Exception as e:
-        # Mark task as failed in case of unhandled errors
         db = SessionLocal()
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
@@ -69,7 +72,6 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
                 task.final_result = f"Orchestrator error: {str(e)}"
                 db.commit()
                 
-                # Write an error log
                 error_log = AgentLog(
                     task_id=task_id,
                     agent_name="System",
@@ -80,9 +82,11 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str):
                 db.commit()
         finally:
             db.close()
+    finally:
+        task_registry.unregister(task_id)
 
 @router.post("")
-async def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Dict[str, Any]:
     task = Task(
         prompt=payload.prompt,
         plugin_name=payload.plugin_name,
@@ -92,8 +96,8 @@ async def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db
     db.commit()
     db.refresh(task)
     
-    # Run the orchestrator in the background
-    background_tasks.add_task(run_workflow_async, task.id, task.prompt, task.plugin_name)
+    async_task = asyncio.create_task(run_workflow_async(task.id, task.prompt, task.plugin_name))
+    task_registry.register(task.id, async_task)
     
     return task.to_dict()
 
@@ -232,6 +236,7 @@ def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Sess
     db.add(log)
     db.commit()
 
+    task_registry.cancel(task_id)
     gate_registry.signal(task_id)
 
     return {"message": "Task cancelled", "status": "cancelled"}

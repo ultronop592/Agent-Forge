@@ -65,6 +65,7 @@ def ensure_db_schema():
         ("total_tokens", "INTEGER DEFAULT 0"),
         ("total_cost_usd", "FLOAT DEFAULT 0.0"),
         ("total_latency_ms", "FLOAT DEFAULT 0.0"),
+        ("failure_reason", "TEXT"),
     ]
     
     log_cols = [

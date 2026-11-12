@@ -53,6 +53,7 @@ class Task(Base):
     status = Column(String, default="pending")  # pending, awaiting_plan_approval, running, awaiting_steering, completed, failed, cancelled
     plugin_name = Column(String, nullable=False)
     final_result = Column(Text, nullable=True)
+    failure_reason = Column(Text, nullable=True)
     total_tokens = Column(Integer, nullable=True, default=0)
     total_cost_usd = Column(Float, nullable=True, default=0.0)
     total_latency_ms = Column(Float, nullable=True, default=0.0)
@@ -102,6 +103,7 @@ class Task(Base):
             "status": self.status,
             "plugin_name": self.plugin_name,
             "final_result": self.final_result,
+            "failure_reason": self.failure_reason,
             "confidence_score": conf,
             "total_tokens": total_tokens,
             "total_cost_usd": round(total_cost_usd, 6),

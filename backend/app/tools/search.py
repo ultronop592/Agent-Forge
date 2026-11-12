@@ -13,6 +13,8 @@ import urllib.parse
 from typing import Any, Dict, List
 import httpx
 from backend.app.core.config import settings
+from backend.app.harness.errors import ToolDenied
+from backend.app.harness.harness import get_current_harness
 
 logger = logging.getLogger("agentforge.tools.search")
 
@@ -51,6 +53,8 @@ async def search_web(query: str, max_results: int = 5) -> Dict[str, Any]:
             tavily_res = await _search_tavily(cleaned_query, tavily_key, max_results)
             if tavily_res.get("results"):
                 return tavily_res
+        except ToolDenied:
+            raise
         except Exception as e:
             logger.warning(f"Tavily search failed, falling back to DuckDuckGo: {e}")
 
@@ -70,7 +74,9 @@ async def search_web(query: str, max_results: int = 5) -> Dict[str, Any]:
 
 
 async def _search_tavily(query: str, api_key: str, max_results: int) -> Dict[str, Any]:
-    """Execute search query against Tavily API."""
+    harness = get_current_harness()
+    if harness:
+        harness.authorize("analyst", "tavily_search")
     url = "https://api.tavily.com/search"
     payload = {
         "api_key": api_key,

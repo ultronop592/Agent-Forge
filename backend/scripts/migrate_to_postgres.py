@@ -151,6 +151,7 @@ def migrate_data(source_url: str, target_url: str, batch_size: int = 200) -> boo
                     status=t.status,
                     plugin_name=t.plugin_name,
                     final_result=t.final_result,
+                    failure_reason=getattr(t, "failure_reason", None),
                     total_tokens=t.total_tokens,
                     total_cost_usd=t.total_cost_usd,
                     total_latency_ms=t.total_latency_ms,
