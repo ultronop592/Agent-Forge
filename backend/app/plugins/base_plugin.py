@@ -29,3 +29,6 @@ class BaseWorkflowPlugin(ABC):
     def get_default_subtasks(self, prompt: str) -> List[Dict[str, Any]]:
         """Returns standard subtasks if the Planner needs default configurations."""
         pass
+
+    def get_tool_permissions(self, agent_name: str) -> List[str]:
+        return []

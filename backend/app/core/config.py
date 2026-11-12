@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Cost Telemetry & Model Settings
     cost_model: str = Field(default="gemini-2.5-flash", validation_alias="COST_MODEL")
 
+    harness_max_steps: int = Field(default=25, validation_alias="HARNESS_MAX_STEPS")
+    harness_max_seconds: float = Field(default=300.0, validation_alias="HARNESS_MAX_SECONDS")
+    harness_max_cost_usd: float = Field(default=0.50, validation_alias="HARNESS_MAX_COST_USD")
+    harness_max_tokens: int = Field(default=120000, validation_alias="HARNESS_MAX_TOKENS")
+
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
     allowed_origins: str = Field(default="http://localhost:3000", validation_alias="ALLOWED_ORIGINS")
 
