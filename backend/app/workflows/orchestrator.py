@@ -1,9 +1,11 @@
 import asyncio
+import time
 import logging
 from typing import Dict, Any, List, Literal
 from langgraph.graph import StateGraph, END
 
 from backend.app.workflows.state import AgentState
+from backend.app.workflows.gate_registry import gate_registry
 from backend.app.agents.planner import PlannerAgent
 from backend.app.agents.analyst_agent import AnalystAgent
 from backend.app.agents.researcher import ResearcherAgent
@@ -166,18 +168,24 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         f"⏸️ [Manager] Goal decomposed. Execution paused — awaiting user plan approval in control console (Auto-proceeding in {int(timeout_sec)}s if no response)."
     )
 
-    # Pause until user approves/modifies plan via API (status -> running), cancels (status -> cancelled), or timeout triggers auto-proceed
-    elapsed = 0.0
-    poll_interval = 0.5
+    gate_event = gate_registry.open(task_id)
     curr_status = "awaiting_plan_approval"
+    start_time = time.monotonic()
 
     db = SessionLocal()
     try:
-        while elapsed < timeout_sec:
+        while (time.monotonic() - start_time) < timeout_sec:
+            remaining = timeout_sec - (time.monotonic() - start_time)
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
+            except asyncio.TimeoutError:
+                pass
+
             db.expire_all()
             t = db.query(Task).filter(Task.id == task_id).first()
             curr_status = t.status if t else "failed"
-
 
             if curr_status == "running":
                 break
@@ -191,10 +199,10 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
                     "logs": []
                 }
 
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
+            if gate_event.is_set():
+                gate_event.clear()
 
-        if elapsed >= timeout_sec and curr_status == "awaiting_plan_approval":
+        if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_plan_approval":
             logger.info(f"Task {task_id} HITL plan approval timed out after {timeout_sec}s. Auto-proceeding.")
             update_task_in_db(task_id, "running")
             manager_agent.log_db(
@@ -203,6 +211,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
             )
     finally:
         db.close()
+        gate_registry.close(task_id)
 
     # Re-fetch subtasks in case user edited, added, or re-ordered subtasks in UI
     db = SessionLocal()
@@ -551,17 +560,24 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
 
         user_steering = ""
         user_completed = False
-        elapsed = 0.0
-        poll_interval = 0.5
         curr_status = "awaiting_steering"
+        gate_event = gate_registry.open(task_id)
+        start_time = time.monotonic()
 
         db = SessionLocal()
         try:
-            while elapsed < timeout_sec:
+            while (time.monotonic() - start_time) < timeout_sec:
+                remaining = timeout_sec - (time.monotonic() - start_time)
+                if remaining <= 0:
+                    break
+                try:
+                    await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
+                except asyncio.TimeoutError:
+                    pass
+
                 db.expire_all()
                 t = db.query(Task).filter(Task.id == task_id).first()
                 curr_status = t.status if t else "failed"
-
 
                 latest_steering_log = (
                     db.query(AgentLog)
@@ -581,10 +597,10 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                     logger.info(f"Task {task_id} was cancelled by user during steering.")
                     break
 
-                await asyncio.sleep(poll_interval)
-                elapsed += poll_interval
+                if gate_event.is_set():
+                    gate_event.clear()
 
-            if elapsed >= timeout_sec and curr_status == "awaiting_steering":
+            if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_steering":
                 logger.info(f"Task {task_id} HITL steering timed out after {timeout_sec}s. Auto-retrying.")
                 update_task_in_db(task_id, "running")
                 manager_agent.log_db(
@@ -593,6 +609,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                 )
         finally:
             db.close()
+            gate_registry.close(task_id)
 
 
         if user_completed:

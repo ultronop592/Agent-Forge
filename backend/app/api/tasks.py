@@ -11,6 +11,7 @@ from backend.app.database.connection import get_db, SessionLocal
 from backend.app.database.models import Task, Subtask, AgentLog
 from backend.app.workflows.orchestrator import orchestrator_graph
 from backend.app.workflows.state import AgentState
+from backend.app.workflows.gate_registry import gate_registry
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -133,13 +134,12 @@ def delete_task(task_id: str, db: Session = Depends(get_db)):
     return {"message": f"Task {task_id} deleted successfully"}
 
 @router.post("/{task_id}/approve_plan")
-def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depends(get_db)):
+def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depends(get_db)) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     if payload.subtasks is not None:
-        # User customized the subtasks list: delete existing and replace with modified list
         db.query(Subtask).filter(Subtask.task_id == task_id).delete()
         db.commit()
 
@@ -158,7 +158,6 @@ def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depend
     task.status = "running"
     db.commit()
 
-    # Log Manager approval action
     log = AgentLog(
         task_id=task_id,
         agent_name="Manager",
@@ -168,10 +167,12 @@ def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depend
     db.add(log)
     db.commit()
 
+    gate_registry.signal(task_id)
+
     return {"message": "Plan approved successfully", "status": "running"}
 
 @router.post("/{task_id}/steer")
-def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db)):
+def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db)) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -187,9 +188,9 @@ def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db
         )
         db.add(log)
         db.commit()
+        gate_registry.signal(task_id)
         return {"message": "Task completed by user override", "status": "completed"}
 
-    # Action is steer: record steering prompt and resume running
     task.status = "running"
     db.commit()
 
@@ -209,10 +210,12 @@ def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db
     db.add(manager_log)
     db.commit()
 
+    gate_registry.signal(task_id)
+
     return {"message": "Steering feedback applied", "status": "running"}
 
 @router.post("/{task_id}/reject")
-def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Session = Depends(get_db)):
+def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Session = Depends(get_db)) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -228,6 +231,8 @@ def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Sess
     )
     db.add(log)
     db.commit()
+
+    gate_registry.signal(task_id)
 
     return {"message": "Task cancelled", "status": "cancelled"}
 
