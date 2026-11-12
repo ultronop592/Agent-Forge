@@ -1,50 +1,45 @@
 import os
+import json
 import time
 import logging
 from typing import Optional, Dict, Any, Callable
 from functools import wraps
+from pydantic import BaseModel
 
 from backend.app.core.config import settings
 
 logger = logging.getLogger("agentforge.telemetry")
 
-# Token pricing per 1,000,000 tokens (USD)
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
-    "gemini-2.5-flash": {
-        "input_per_million": 0.075,
-        "output_per_million": 0.30,
-    },
-    "gemini-1.5-flash": {
-        "input_per_million": 0.075,
-        "output_per_million": 0.30,
-    },
-    "gemini-1.5-pro": {
-        "input_per_million": 1.25,
-        "output_per_million": 5.00,
-    },
-    "models/gemini-embedding-001": {
-        "input_per_million": 0.025,
-        "output_per_million": 0.0,
-    },
-    "default": {
-        "input_per_million": 0.10,
-        "output_per_million": 0.40,
-    }
-}
+
+class ModelPrice(BaseModel):
+    input_per_million: float
+    output_per_million: float
+
+
+def load_model_prices(config_path: Optional[str] = None) -> Dict[str, ModelPrice]:
+    path = config_path or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "config",
+        "model_prices.json"
+    )
+    with open(path, "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
+    return {model: ModelPrice(**price_data) for model, price_data in raw_data.items()}
 
 
 def calculate_cost(prompt_tokens: int, completion_tokens: int, model: Optional[str] = None) -> float:
-    """Calculate the estimated USD cost of an LLM call based on token usage."""
     if not model:
         model = getattr(settings, "cost_model", None) or os.environ.get("COST_MODEL", "gemini-2.5-flash")
-    pricing = MODEL_PRICING.get(model, MODEL_PRICING["default"])
-    input_cost = (prompt_tokens / 1_000_000.0) * pricing["input_per_million"]
-    output_cost = (completion_tokens / 1_000_000.0) * pricing["output_per_million"]
+    prices = load_model_prices()
+    if model not in prices:
+        raise ValueError(f"Unknown model: '{model}'. Pricing configuration not found in model_prices.json.")
+    pricing = prices[model]
+    input_cost = (prompt_tokens / 1_000_000.0) * pricing.input_per_million
+    output_cost = (completion_tokens / 1_000_000.0) * pricing.output_per_million
     return round(input_cost + output_cost, 7)
 
 
 def is_langsmith_enabled() -> bool:
-    """Check if LangSmith tracing is actively configured."""
     has_key = bool(os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY") or settings.langsmith_api_key)
     tracing_flag = (
         os.environ.get("LANGSMITH_TRACING", "").lower() in ("true", "1") or
@@ -54,8 +49,7 @@ def is_langsmith_enabled() -> bool:
     return has_key and tracing_flag
 
 
-def setup_langsmith():
-    """Configure environment variables for LangSmith and LangGraph tracing."""
+def setup_langsmith() -> None:
     api_key = os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY") or settings.langsmith_api_key
     project = os.environ.get("LANGSMITH_PROJECT") or os.environ.get("LANGCHAIN_PROJECT") or settings.langsmith_project or "AgentForge"
     endpoint = os.environ.get("LANGSMITH_ENDPOINT") or os.environ.get("LANGCHAIN_ENDPOINT") or settings.langsmith_endpoint or "https://api.smith.langchain.com"
@@ -75,12 +69,9 @@ def setup_langsmith():
         os.environ["LANGSMITH_API_KEY"] = api_key
         os.environ["LANGSMITH_PROJECT"] = project
         os.environ["LANGSMITH_ENDPOINT"] = endpoint
-        os.environ["LANGSMITH_PROJECT"] = project
-        os.environ["LANGSMITH_ENDPOINT"] = endpoint
 
         logger.info(f"🛰️ LangSmith Tracing ENABLED for project: '{project}' (Endpoint: {endpoint})")
     else:
-        # Graceful fallback: local telemetry without LangSmith remote export
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         os.environ["LANGSMITH_TRACING"] = "false"
         logger.info("📊 LangSmith Tracing is operating in LOCAL TELEMETRY mode (token, latency & cost tracking enabled in DB).")
@@ -91,12 +82,8 @@ def agent_traceable(
     run_type: str = "chain",
     tags: Optional[list] = None,
     metadata: Optional[dict] = None
-):
-    """
-    Decorator that applies LangSmith @traceable if available and enabled,
-    while gracefully executing without dependencies if disabled.
-    """
-    def decorator(func: Callable):
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         try:
             from langsmith import traceable
             trace_func = traceable(
@@ -109,7 +96,7 @@ def agent_traceable(
         except Exception as e:
             logger.debug(f"LangSmith traceable wrapper skipped: {e}")
             @wraps(func)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
             return wrapper
     return decorator

@@ -7,7 +7,8 @@ from backend.app.core.telemetry import (
     setup_langsmith,
     is_langsmith_enabled,
     agent_traceable,
-    MODEL_PRICING
+    load_model_prices,
+    ModelPrice
 )
 from backend.app.agents.base import BaseAgent
 from backend.app.agents.manager_agent import ManagerAgent
@@ -15,36 +16,42 @@ from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Task, AgentLog
 
 
-def test_calculate_cost_gemini():
-    # 1,000,000 prompt tokens @ $0.075 + 1,000,000 completion tokens @ $0.30 = $0.375
+def test_calculate_cost_gemini() -> None:
     cost = calculate_cost(1_000_000, 1_000_000, "gemini-2.5-flash")
     assert pytest.approx(cost, 0.0001) == 0.375
 
-    # 1,000 prompt tokens + 500 completion tokens
     cost_small = calculate_cost(1000, 500, "gemini-2.5-flash")
     expected = (1000 / 1e6 * 0.075) + (500 / 1e6 * 0.30)
     assert pytest.approx(cost_small, 0.000001) == expected
 
 
-def test_configurable_cost_model():
+def test_calculate_cost_unknown_model_raises_error() -> None:
+    with pytest.raises(ValueError, match="Unknown model"):
+        calculate_cost(1000, 1000, model="unknown-model-xyz")
+
+
+def test_load_model_prices_from_json() -> None:
+    prices = load_model_prices()
+    assert "gemini-2.5-flash" in prices
+    assert isinstance(prices["gemini-2.5-flash"], ModelPrice)
+    assert prices["gemini-2.5-flash"].input_per_million == 0.075
+    assert prices["gemini-2.5-flash"].output_per_million == 0.30
+
+
+def test_configurable_cost_model() -> None:
     from backend.app.core.config import settings
 
-    # Default should be gemini-2.5-flash
     assert settings.cost_model == "gemini-2.5-flash"
 
-    # calculate_cost with no model argument uses settings.cost_model
     cost_default = calculate_cost(1_000_000, 1_000_000)
     assert pytest.approx(cost_default, 0.0001) == 0.375
 
-    # calculate_cost with explicit gemini-1.5-pro (1.25 + 5.00 = 6.25)
     cost_pro = calculate_cost(1_000_000, 1_000_000, model="gemini-1.5-pro")
     assert pytest.approx(cost_pro, 0.0001) == 6.25
 
-    # BaseAgent initializes self.cost_model from settings/env var
     agent = BaseAgent(name="CostTestAgent", system_instruction="Testing cost")
     assert agent.cost_model == "gemini-2.5-flash"
 
-    # BaseAgent with overridden cost_model
     with patch.object(settings, "cost_model", "gemini-1.5-pro"):
         agent_pro = BaseAgent(name="CostTestPro", system_instruction="Testing pro cost")
         assert agent_pro.cost_model == "gemini-1.5-pro"
