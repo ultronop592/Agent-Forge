@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, HarnessUsage } from "@/lib/api";
 import WorkflowGraph from "@/components/WorkflowGraph";
 import Timeline from "@/components/Timeline";
 import AgentTerminal from "@/components/AgentTerminal";
@@ -73,6 +73,7 @@ function WorkspaceInner() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [finalResult, setFinalResult] = useState<string>("");
   const [confidenceScore, setConfidenceScore] = useState<number | null>(null);
+  const [harnessUsage, setHarnessUsage] = useState<HarnessUsage | null>(null);
   
   // UI Panels Tabs
   const [activeTab, setActiveTab] = useState<"graph" | "timeline" | "terminal" | "result">("graph");
@@ -139,6 +140,7 @@ function WorkspaceInner() {
     setLogs([]);
     setFinalResult("");
     setConfidenceScore(null);
+    setHarnessUsage(null);
     setActiveTab("graph");
     setIsStreaming(false);
     reconnectAttemptsRef.current = 0;
@@ -155,6 +157,16 @@ function WorkspaceInner() {
       setLogs(data.logs || []);
       setFinalResult(data.final_result || "");
       setConfidenceScore(data.confidence_score);
+
+      if (data.failure_reason) {
+        try {
+          const parsed = JSON.parse(data.failure_reason);
+          if (parsed.harness) {
+            setHarnessUsage(parsed.harness);
+          }
+        } catch {
+        }
+      }
 
       if (data.status === "completed" && data.final_result) {
         setActiveTab("result");
@@ -301,6 +313,9 @@ function WorkspaceInner() {
         }
         if (payload.subtasks && !eventType) {
           setSubtasks(payload.subtasks);
+        }
+        if (payload.harness) {
+          setHarnessUsage(payload.harness);
         }
 
       } catch (err) {
@@ -701,6 +716,68 @@ function WorkspaceInner() {
                   </div>
                 )}
               </div>
+
+              {harnessUsage && (
+                <div className="glass-panel rounded-2xl p-4 space-y-2.5 border border-zinc-800 bg-[#18181b]">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    <span>Harness Limits</span>
+                    <span className="text-[9px] text-zinc-500 font-mono">
+                      {harnessUsage.elapsed_seconds}s / {harnessUsage.max_seconds}s
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-zinc-400">
+                      <span>Steps</span>
+                      <span className="font-mono text-zinc-200">
+                        {harnessUsage.step_count} / {harnessUsage.max_steps}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-[#da7756] h-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (harnessUsage.step_count / harnessUsage.max_steps) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-zinc-400">
+                      <span>Tokens</span>
+                      <span className="font-mono text-zinc-200">
+                        {harnessUsage.token_total.toLocaleString()} / {harnessUsage.max_tokens.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (harnessUsage.token_total / harnessUsage.max_tokens) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-zinc-400">
+                      <span>Cost</span>
+                      <span className="font-mono text-zinc-200">
+                        ${harnessUsage.cost_total.toFixed(4)} / ${harnessUsage.max_cost_usd.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (harnessUsage.cost_total / harnessUsage.max_cost_usd) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Subtask Timeline partition */}
               <div className="flex-1 overflow-y-auto">

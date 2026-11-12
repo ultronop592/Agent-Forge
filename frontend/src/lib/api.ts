@@ -1,5 +1,16 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
+export interface HarnessUsage {
+  step_count: number;
+  max_steps: number;
+  token_total: number;
+  max_tokens: number;
+  cost_total: number;
+  max_cost_usd: number;
+  elapsed_seconds: number;
+  max_seconds: number;
+}
+
 // Utility for fetching JSON
 async function def_fetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;

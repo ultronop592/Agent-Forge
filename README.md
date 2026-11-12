@@ -706,6 +706,51 @@ CORS is configured to allow requests from origins specified by the ALLOWED_ORIGI
 
 ---
 
+## Runtime Harness
+
+AgentForge includes an isolated runtime execution harness (`backend/app/harness/`) that enforces strict resource boundaries and granular tool permissions on every task. The harness is instantiated per-task in the orchestrator runner and carried alongside the workflow state without polluting the serialized graph data.
+
+### Limits Configuration
+
+Hard resource limits are represented by the `RunLimits` schema with standard defaults overridable via environment variables:
+
+| Limit Dimension | Default | Environment Variable | Description |
+|---|---|---|---|
+| Steps | 25 | `HARNESS_MAX_STEPS` | Max total graph node executions, including retry cycles |
+| Wall-Clock Time | 300.0s | `HARNESS_MAX_SECONDS` | Max duration from pipeline invocation to completion |
+| Dollar Cost | $0.50 | `HARNESS_MAX_COST_USD` | Max cumulative API expenditure across all agents |
+| Token Budget | 120,000 | `HARNESS_MAX_TOKENS` | Max combined prompt and completion tokens |
+
+### Tool Permissions Model
+
+Every agent operates under a least-privilege tool allowlist configured in `harness/permissions.py`:
+
+- **Planner**: No tools permitted.
+- **Analyst**: May execute `tavily_search` live web queries.
+- **Memory Agent**: May execute semantic memory queries via `memory_search`.
+- **Executor**: May use no MCP tools by default.
+- **Verifier**: No tools permitted.
+
+Plugins can extend an agent's permissions by implementing the optional `get_tool_permissions(agent_name)` method on `BaseWorkflowPlugin`. Tool calls are strictly authorized before execution in `mcp/client.py`, `api/mcp.py`, and `tools/search.py`. Attempting to invoke an unauthorized tool raises `ToolDenied`.
+
+### Limit Violation Behavior
+
+Before executing any graph node (`planner`, `parallel_research`, `memory_agent`, `analyst`, `executor`, `verifier`), the orchestrator invokes `harness.before_step()`. After every LLM invocation, `BaseAgent` calls `harness.record()` with the exact token usage and calculated dollar cost.
+
+If any threshold is crossed, the harness raises `BudgetExceeded` carrying the specific reason code (`max_steps`, `max_seconds`, `max_cost_usd`, or `max_tokens`):
+
+1. **Task Status**: The task status in the database is transitioned immediately to `failed`.
+2. **Failure Reason**: The reason code and a full usage snapshot (`step_count`, `token_total`, `cost_total`, `elapsed_seconds`, and respective limits) are recorded in the `tasks.failure_reason` column.
+3. **Manager Audit**: A `manager_decision` audit entry is written to the database documenting the exact limit exceeded and the resource snapshot.
+4. **SSE Event Stream**: A terminal event and live stream message are pushed to connected frontend clients containing the `harness` snapshot.
+5. **Clean Termination**: Execution stops cleanly without orphaned subprocesses or unhandled exceptions.
+
+### Active Task Cancellation
+
+When a user rejects or cancels a task via `POST /tasks/{task_id}/reject`, the system references the running `asyncio.Task` registered in `TaskRegistry` and cancels it directly. This immediately halts in-flight LLM calls and network operations rather than waiting for background polling loops.
+
+---
+
 ## Performance Engineering
 
 Several deliberate architectural decisions reduce API call count, latency, and operational cost.
@@ -946,6 +991,10 @@ All configuration is managed through environment variables. Copy .env.example to
 | API_SECRET_KEY | empty | When set, all API requests require this key via X-API-Key header or Bearer token |
 | ALLOWED_ORIGINS | http://localhost:3000 | Comma-separated list of allowed CORS origins |
 | HITL_TIMEOUT_SECONDS | 60.0 | Seconds before HITL gates auto-proceed |
+| HARNESS_MAX_STEPS | 25 | Maximum execution steps allowed per task |
+| HARNESS_MAX_SECONDS | 300.0 | Maximum execution time in seconds per task |
+| HARNESS_MAX_COST_USD | 0.50 | Maximum model cost in USD per task |
+| HARNESS_MAX_TOKENS | 120000 | Maximum token consumption per task |
 | MCP_SERVERS_JSON | [] | JSON array of MCP server configurations to load at startup |
 | RATE_LIMIT_ENABLED | true | Enable sliding window rate limiting |
 | RATE_LIMIT_PER_MINUTE | 60 | Maximum requests per minute per IP or API key |
