@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # Cost Telemetry & Model Settings
     cost_model: str = Field(default="gemini-2.5-flash", validation_alias="COST_MODEL")
 
-    # Security & CORS Settings
-    allowed_origins: str = Field(default="*", validation_alias="ALLOWED_ORIGINS")
+    environment: str = Field(default="development", validation_alias="ENVIRONMENT")
+    allowed_origins: str = Field(default="http://localhost:3000", validation_alias="ALLOWED_ORIGINS")
 
     # Rate Limiting Settings (Phase 3)
     rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")

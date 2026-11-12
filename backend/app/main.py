@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -37,14 +37,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration — reads comma-separated origins from ALLOWED_ORIGINS env var
-# e.g. ALLOWED_ORIGINS=https://agentforge.vercel.app,https://localhost:3000
-_raw_origins = getattr(settings, "allowed_origins", None) or os.environ.get("ALLOWED_ORIGINS", "*")
+_raw_origins = getattr(settings, "allowed_origins", None) or os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 
-def validate_allowed_origins(origins: list) -> Optional[str]:
-    """Validate CORS ALLOWED_ORIGINS configuration and return warning message if insecure."""
+def validate_allowed_origins(origins: List[str], environment: Optional[str] = None) -> Optional[str]:
+    env = (environment or getattr(settings, "environment", None) or os.environ.get("ENVIRONMENT", "development")).strip().lower()
+    if env == "production":
+        if not origins or "*" in origins:
+            raise RuntimeError(
+                "Refusing to start in production environment: ALLOWED_ORIGINS cannot be empty or contain wildcard '*'."
+            )
     if "*" in origins:
         return (
             "⚠️ [Security Warning] ALLOWED_ORIGINS contains wildcard '*' with allow_credentials=True. "
@@ -81,7 +84,7 @@ app.include_router(evals.router, prefix="/api", dependencies=[Depends(verify_api
 app.include_router(export.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 @app.get("/health")
-def healthcheck():
+def healthcheck() -> Dict[str, Any]:
     db_status = get_database_status()
     is_ok = db_status.get("status") == "connected"
     return {
@@ -93,7 +96,7 @@ def healthcheck():
 
 
 @app.on_event("startup")
-async def startup_event():
+async def startup_event() -> None:
     logger.info("AgentForge application startup initiated.")
 
     # Validate ALLOWED_ORIGINS and emit warning if wildcard or empty
@@ -144,7 +147,7 @@ async def startup_event():
             logger.error(f"Failed to load MCP configurations from env json: {e}")
 
 @app.on_event("shutdown")
-async def shutdown_event():
+async def shutdown_event() -> None:
     logger.info("AgentForge shutting down, stopping MCP subprocesses...")
     # Await runtime client stops
     await mcp_manager.stop_all()
