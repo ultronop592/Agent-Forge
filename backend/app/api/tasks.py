@@ -1,14 +1,22 @@
 import asyncio
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 from backend.app.core.config import settings
 from backend.app.core.stream import token_stream_manager
+from backend.app.core.idempotency import (
+    validate_idempotency_key,
+    compute_request_hash,
+    compute_scope,
+    clean_expired_keys
+)
 from backend.app.database.connection import get_db, SessionLocal
-from backend.app.database.models import Task, Subtask, AgentLog
+from backend.app.database.models import Task, Subtask, AgentLog, IdempotencyKey
 from backend.app.workflows.orchestrator import orchestrator_graph, run_task_pipeline
 from backend.app.workflows.state import AgentState
 from backend.app.workflows.gate_registry import gate_registry
@@ -69,20 +77,114 @@ async def run_workflow_async(task_id: str, prompt: str, plugin_name: str) -> Non
         task_registry.unregister(task_id)
 
 @router.post("")
-async def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def create_task(
+    payload: TaskCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    idempotency_key = request.headers.get("Idempotency-Key")
+    api_key = request.headers.get("X-API-Key") or request.headers.get("Authorization")
+    scope = compute_scope(api_key)
+
+    if not idempotency_key:
+        if getattr(settings, "idempotency_required", False):
+            raise HTTPException(status_code=422, detail="Idempotency-Key header is required.")
+
+        task = Task(
+            prompt=payload.prompt,
+            plugin_name=payload.plugin_name,
+            status="pending"
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        async_task = asyncio.create_task(run_workflow_async(task.id, task.prompt, task.plugin_name))
+        task_registry.register(task.id, async_task)
+
+        return JSONResponse(content=task.to_dict(), status_code=200)
+
+    validate_idempotency_key(idempotency_key)
+    clean_expired_keys(db)
+    request_hash = compute_request_hash(payload.model_dump())
+
+    now = datetime.utcnow()
+    existing_key = (
+        db.query(IdempotencyKey)
+        .filter(IdempotencyKey.scope == scope, IdempotencyKey.key == idempotency_key)
+        .first()
+    )
+
+    if existing_key:
+        if existing_key.expires_at >= now:
+            if existing_key.request_hash == request_hash:
+                task = db.query(Task).filter(Task.id == existing_key.task_id).first()
+                if task:
+                    return JSONResponse(
+                        content=task.to_dict(),
+                        status_code=existing_key.response_status or 200,
+                        headers={"Idempotent-Replay": "true"}
+                    )
+            else:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Idempotency-Key already used with a different request payload."
+                )
+        else:
+            db.delete(existing_key)
+            db.commit()
+
+    ttl_hours = getattr(settings, "idempotency_ttl_hours", 24)
+    expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+
     task = Task(
         prompt=payload.prompt,
         plugin_name=payload.plugin_name,
         status="pending"
     )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    
-    async_task = asyncio.create_task(run_workflow_async(task.id, task.prompt, task.plugin_name))
-    task_registry.register(task.id, async_task)
-    
-    return task.to_dict()
+
+    try:
+        db.add(task)
+        db.flush()
+
+        idem = IdempotencyKey(
+            scope=scope,
+            key=idempotency_key,
+            request_hash=request_hash,
+            task_id=task.id,
+            response_status=200,
+            expires_at=expires_at
+        )
+        db.add(idem)
+        db.commit()
+        db.refresh(task)
+        is_creator = True
+    except IntegrityError:
+        db.rollback()
+        is_creator = False
+        winning_key = (
+            db.query(IdempotencyKey)
+            .filter(IdempotencyKey.scope == scope, IdempotencyKey.key == idempotency_key)
+            .first()
+        )
+        if winning_key and winning_key.request_hash == request_hash:
+            winning_task = db.query(Task).filter(Task.id == winning_key.task_id).first()
+            if winning_task:
+                return JSONResponse(
+                    content=winning_task.to_dict(),
+                    status_code=winning_key.response_status or 200,
+                    headers={"Idempotent-Replay": "true"}
+                )
+        raise HTTPException(
+            status_code=422,
+            detail="Idempotency-Key already used with a different request payload."
+        )
+
+    if is_creator:
+        async_task = asyncio.create_task(run_workflow_async(task.id, task.prompt, task.plugin_name))
+        task_registry.register(task.id, async_task)
+        return JSONResponse(content=task.to_dict(), status_code=200)
 
 @router.get("")
 def list_tasks(

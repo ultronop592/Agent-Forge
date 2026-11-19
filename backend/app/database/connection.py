@@ -105,6 +105,23 @@ def ensure_db_schema():
                     conn.commit()
                 except Exception:
                     pass
+
+                try:
+                    conn.execute(text(
+                        "CREATE TABLE IF NOT EXISTS idempotency_keys ("
+                        "id TEXT PRIMARY KEY, "
+                        "scope TEXT NOT NULL, "
+                        "key TEXT NOT NULL, "
+                        "request_hash TEXT NOT NULL, "
+                        "task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, "
+                        "response_status INTEGER DEFAULT 200, "
+                        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                        "expires_at DATETIME NOT NULL, "
+                        "UNIQUE(scope, key))"
+                    ))
+                    conn.commit()
+                except Exception:
+                    pass
         else:
             with engine.connect() as conn:
                 # 1. Enable pgvector extension
@@ -116,6 +133,23 @@ def ensure_db_schema():
 
                 try:
                     conn.execute(text("CREATE TABLE IF NOT EXISTS audit_logs (id VARCHAR PRIMARY KEY, action VARCHAR NOT NULL, target_id VARCHAR NOT NULL, actor VARCHAR NOT NULL, details TEXT, created_at TIMESTAMP)"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+                try:
+                    conn.execute(text(
+                        "CREATE TABLE IF NOT EXISTS idempotency_keys ("
+                        "id VARCHAR(36) PRIMARY KEY, "
+                        "scope VARCHAR(64) NOT NULL, "
+                        "key VARCHAR(128) NOT NULL, "
+                        "request_hash VARCHAR(64) NOT NULL, "
+                        "task_id VARCHAR(36) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, "
+                        "response_status INTEGER DEFAULT 200, "
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                        "expires_at TIMESTAMP NOT NULL, "
+                        "CONSTRAINT uq_idempotency_scope_key UNIQUE (scope, key))"
+                    ))
                     conn.commit()
                 except Exception:
                     pass

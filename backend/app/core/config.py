@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     admin_api_key: str = Field(default="", validation_alias="ADMIN_API_KEY")
     hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
     
+    # Idempotency Settings
+    idempotency_required: bool = Field(default=False, validation_alias="IDEMPOTENCY_REQUIRED")
+    idempotency_ttl_hours: int = Field(default=24, validation_alias="IDEMPOTENCY_TTL_HOURS")
+
     # MCP Security Settings
     mcp_allowed_commands: str = Field(default="npx,node,python", validation_alias="MCP_ALLOWED_COMMANDS")
     mcp_allow_dynamic_registration: bool = Field(default=False, validation_alias="MCP_ALLOW_DYNAMIC_REGISTRATION")

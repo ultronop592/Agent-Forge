@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 from typing import Dict, Any, Optional, List, Callable
-from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Text, Boolean
+from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Text, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.app.database.connection import Base
 
@@ -250,3 +250,35 @@ class AuditLog(Base):
             "details": self.details,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
+
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scope = Column(String, nullable=False)
+    key = Column(String(128), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    task_id = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    response_status = Column(Integer, default=200)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("scope", "key", name="uq_idempotency_scope_key"),
+    )
+
+    task = relationship("Task")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "key": self.key,
+            "request_hash": self.request_hash,
+            "task_id": self.task_id,
+            "response_status": self.response_status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None
+        }
+
