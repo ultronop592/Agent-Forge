@@ -398,7 +398,8 @@ Hard limits are configured via the `RunLimits` schema with standard production d
 | Limit Dimension | Default Value | Environment Variable | Enforcement Mechanism |
 |---|---|---|---|
 | Step Count | 25 steps | `HARNESS_MAX_STEPS` | Checked in `before_step()`. Each graph node and Verifier retry increments the counter. |
-| Wall-Clock Duration | 300.0 seconds | `HARNESS_MAX_SECONDS` | Elapsed time calculated from harness initialization in `before_step()`. |
+| Active Execution Duration | 300.0 seconds | `HARNESS_MAX_SECONDS` | Active elapsed time calculated excluding paused HITL gate intervals in `before_step()`. |
+| Paused Human Duration | None (Disabled) | `HARNESS_MAX_PAUSED_SECONDS` | Optional cumulative safety cap on time spent paused awaiting human review. |
 | Cost Expenditure | $0.50 USD | `HARNESS_MAX_COST_USD` | Accumulated after every LLM call via `record()` and checked in `before_step()`. |
 | Token Consumption | 120,000 tokens | `HARNESS_MAX_TOKENS` | Accumulated prompt and completion tokens via `record()` and checked in `before_step()`. |
 
@@ -1021,7 +1022,8 @@ All settings are configured via environment variables. Create a `.env` file in t
 | `ADMIN_API_KEY` | None | Secret key required for MCP server management (fails closed when unset) |
 | `HITL_TIMEOUT_SECONDS` | `60.0` | Timeout in seconds before HITL gates auto-proceed |
 | `HARNESS_MAX_STEPS` | `25` | Maximum total graph execution steps allowed per task |
-| `HARNESS_MAX_SECONDS` | `300.0` | Maximum wall-clock execution duration in seconds per task |
+| `HARNESS_MAX_SECONDS` | `300.0` | Maximum active execution duration in seconds per task (excluding HITL pauses) |
+| `HARNESS_MAX_PAUSED_SECONDS` | None | Optional maximum cumulative paused duration in seconds across HITL gates |
 | `HARNESS_MAX_COST_USD` | `0.50` | Maximum cumulative dollar expenditure allowed per task |
 | `HARNESS_MAX_TOKENS` | `120000` | Maximum cumulative token consumption allowed per task |
 | `RATE_LIMIT_ENABLED` | `true` | Enables sliding window rate limiting |

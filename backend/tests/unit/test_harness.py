@@ -250,4 +250,241 @@ async def test_retry_loop_cannot_exceed_max_steps(db_session: Any, monkeypatch: 
     assert "max_steps" in failed_task.failure_reason
 
 
+class FakeClock:
+    def __init__(self, initial: float = 1000.0) -> None:
+        self.current: float = initial
+
+    def __call__(self) -> float:
+        return self.current
+
+    def advance(self, seconds: float) -> None:
+        self.current += seconds
+
+
+def test_harness_pause_and_resume_excludes_paused_time() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(limits=RunLimits(max_seconds=50.0), clock=clock)
+    clock.advance(10.0)
+    harness.pause("waiting")
+    clock.advance(60.0)
+    harness.resume()
+    clock.advance(10.0)
+    assert harness.wall_seconds() == 80.0
+    assert harness.paused_seconds() == 60.0
+    assert harness.active_seconds() == 20.0
+
+
+def test_harness_limit_not_exceeded_when_active_under_limit_but_wall_over() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(limits=RunLimits(max_seconds=30.0), clock=clock)
+    clock.advance(10.0)
+    with harness.paused("hitl_gate"):
+        clock.advance(200.0)
+    clock.advance(10.0)
+    assert harness.wall_seconds() == 220.0
+    assert harness.active_seconds() == 20.0
+    harness.before_step("planner")
+
+
+def test_harness_limit_exceeded_when_active_over_limit_regardless_of_pauses() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(limits=RunLimits(max_seconds=30.0), clock=clock)
+    with harness.paused("hitl_gate"):
+        clock.advance(50.0)
+    clock.advance(35.0)
+    with pytest.raises(BudgetExceeded) as exc_info:
+        harness.before_step("planner")
+    assert exc_info.value.reason_code == "max_seconds"
+
+
+def test_harness_pause_resume_idempotency() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(clock=clock)
+    harness.resume()
+    assert harness._pause_start is None
+    assert harness.total_paused == 0.0
+
+    harness.pause("first")
+    first_start = harness._pause_start
+    clock.advance(10.0)
+    harness.pause("second")
+    assert harness._pause_start == first_start
+
+    clock.advance(20.0)
+    harness.resume()
+    assert harness.total_paused == 30.0
+    assert harness._pause_start is None
+
+    harness.resume()
+    assert harness.total_paused == 30.0
+
+
+def test_harness_paused_context_manager_resumes_on_exception() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(clock=clock)
+    with pytest.raises(RuntimeError):
+        with harness.paused("exception_test"):
+            clock.advance(15.0)
+            raise RuntimeError("gate error")
+    assert harness._pause_start is None
+    assert harness.total_paused == 15.0
+
+
+@pytest.mark.asyncio
+async def test_harness_paused_context_manager_resumes_on_cancellation() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(clock=clock)
+
+    async def cancelled_flow() -> None:
+        with harness.paused("cancellation_test"):
+            clock.advance(25.0)
+            raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled_flow()
+
+    assert harness._pause_start is None
+    assert harness.total_paused == 25.0
+
+
+def test_harness_multiple_pauses_accumulate() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(limits=RunLimits(max_seconds=300.0), clock=clock)
+    clock.advance(10.0)
+
+    with harness.paused("plan_approval"):
+        clock.advance(55.0)
+
+    clock.advance(15.0)
+
+    for i in range(3):
+        with harness.paused(f"steering_retry_{i}"):
+            clock.advance(50.0)
+        clock.advance(5.0)
+
+    assert harness.paused_seconds() == 205.0
+    assert harness.wall_seconds() == 245.0
+    assert harness.active_seconds() == 40.0
+    harness.before_step("verifier")
+
+
+def test_harness_active_seconds_during_in_progress_pause() -> None:
+    clock = FakeClock(100.0)
+    harness = AgentHarness(limits=RunLimits(max_seconds=30.0), clock=clock)
+    clock.advance(10.0)
+    harness.pause("in_progress")
+    clock.advance(40.0)
+    assert harness.paused_seconds() == 40.0
+    assert harness.wall_seconds() == 50.0
+    assert harness.active_seconds() == 10.0
+    harness.before_step("planner")
+
+
+def test_harness_max_paused_seconds_trips_budget_exceeded() -> None:
+    clock = FakeClock(100.0)
+    limits = RunLimits(max_seconds=300.0, max_paused_seconds=60.0)
+    harness = AgentHarness(limits=limits, clock=clock)
+    clock.advance(5.0)
+    with harness.paused("long_wait"):
+        clock.advance(65.0)
+    with pytest.raises(BudgetExceeded) as exc_info:
+        harness.before_step("planner")
+    assert exc_info.value.reason_code == "max_paused_seconds"
+
+
+def test_harness_snapshot_includes_pause_fields_without_affecting_counters() -> None:
+    clock = FakeClock(100.0)
+    limits = RunLimits(max_steps=5, max_seconds=100.0, max_cost_usd=1.0, max_tokens=1000, max_paused_seconds=50.0)
+    harness = AgentHarness(limits=limits, task_id="task-snap", clock=clock)
+    clock.advance(10.0)
+    with harness.paused("wait"):
+        clock.advance(20.0)
+    harness.before_step("planner")
+    harness.record(tokens=300, cost_usd=0.02)
+    snap = harness.snapshot()
+
+    assert snap["step_count"] == 1
+    assert snap["max_steps"] == 5
+    assert snap["token_total"] == 300
+    assert snap["max_tokens"] == 1000
+    assert snap["cost_total"] == 0.02
+    assert snap["max_cost_usd"] == 1.0
+    assert snap["elapsed_seconds"] == 10.0
+    assert snap["paused_seconds"] == 20.0
+    assert snap["wall_seconds"] == 30.0
+    assert snap["max_seconds"] == 100.0
+    assert snap["max_paused_seconds"] == 50.0
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_pauses_harness_during_plan_approval(db_session: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uuid
+    from backend.app.database.models import Task
+    from backend.app.workflows.orchestrator import planner_node
+    from backend.app.agents.planner import PlannerAgent, PlanResponse, SubtaskPlan
+    from backend.app.workflows.gate_registry import gate_registry
+    from backend.app.harness.harness import set_current_harness, register_harness, unregister_harness
+
+    task_id = f"test-pause-gate-{uuid.uuid4().hex[:8]}"
+    t = Task(id=task_id, prompt="Pause test", plugin_name="default", status="pending")
+    db_session.add(t)
+    db_session.commit()
+
+    limits = RunLimits(max_seconds=100.0)
+    clock = FakeClock(1000.0)
+    harness = AgentHarness(limits=limits, task_id=task_id, clock=clock)
+
+    async def mock_create_plan(self: Any, prompt: str, task_id: str, plugin_name: str = "default") -> PlanResponse:
+        clock.advance(2.0)
+        return PlanResponse(
+            subtasks=[SubtaskPlan(title="T1", description="D1", assigned_agent="executor")],
+            reasoning="Plan",
+        )
+
+    orig_open = gate_registry.open
+    def wrapped_open(tid: str) -> Any:
+        event = orig_open(tid)
+        def _simulate_user_approval() -> None:
+            clock.advance(50.0)
+            from backend.app.database.connection import SessionLocal
+            db = SessionLocal()
+            task = db.query(Task).filter(Task.id == tid).first()
+            if task:
+                task.status = "running"
+                db.commit()
+            db.close()
+            gate_registry.signal(tid)
+
+        asyncio.get_event_loop().call_soon(_simulate_user_approval)
+        return event
+
+    monkeypatch.setattr(gate_registry, "open", wrapped_open)
+    monkeypatch.setattr(PlannerAgent, "create_plan", mock_create_plan)
+    monkeypatch.setattr("backend.app.core.config.settings.hitl_timeout_seconds", 60.0)
+
+    state: Dict[str, Any] = {
+        "task_id": task_id,
+        "prompt": "Pause test",
+        "plugin_name": "default",
+        "subtasks": [],
+        "current_subtask_index": 0,
+        "agent_outputs": {},
+        "agent_sequence": [],
+        "logs": [],
+        "retry_count": 0,
+        "user_steering": "",
+        "research_notes": "",
+    }
+
+    set_current_harness(harness)
+    register_harness(task_id, harness)
+    try:
+        await planner_node(state)  # type: ignore[arg-type]
+    finally:
+        set_current_harness(None)
+        unregister_harness(task_id)
+
+    assert harness.paused_seconds() >= 50.0
+
+
 
