@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     harness_max_seconds: float = Field(default=300.0, validation_alias="HARNESS_MAX_SECONDS")
     harness_max_cost_usd: float = Field(default=0.50, validation_alias="HARNESS_MAX_COST_USD")
     harness_max_tokens: int = Field(default=120000, validation_alias="HARNESS_MAX_TOKENS")
+    harness_max_paused_seconds: Optional[float] = Field(default=None, validation_alias="HARNESS_MAX_PAUSED_SECONDS")
 
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
     allowed_origins: str = Field(default="http://localhost:3000", validation_alias="ALLOWED_ORIGINS")
