@@ -217,3 +217,54 @@ def search_similar(
             })
 
     return results
+
+
+# Postgres migration reference (do not run destructive commands automatically):
+# CREATE EXTENSION IF NOT EXISTS vector;
+# ALTER TABLE memories ALTER COLUMN embedding TYPE vector(768);
+# CREATE INDEX IF NOT EXISTS ix_memories_embedding_hnsw
+#   ON memories USING hnsw (embedding vector_cosine_ops)
+#   WITH (m = 16, ef_construction = 64);
+
+
+def verify_postgres_memory_schema(session: Session) -> None:
+    try:
+        bind = getattr(session, "bind", None)
+        if bind is None and hasattr(session, "get_bind"):
+            bind = session.get_bind()
+        if bind is None or getattr(bind, "dialect", None) is None or bind.dialect.name != "postgresql":
+            return
+
+        ext_row = session.execute(text("SELECT extname FROM pg_extension WHERE extname = 'vector';")).fetchone()
+        if not ext_row:
+            logger.error(
+                "Postgres pgvector extension missing! Run: CREATE EXTENSION IF NOT EXISTS vector;"
+            )
+
+        col_row = session.execute(text(
+            "SELECT data_type, udt_name FROM information_schema.columns "
+            "WHERE table_name = 'memories' AND column_name = 'embedding';"
+        )).fetchone()
+        if not col_row:
+            logger.error(
+                "Memories table has no 'embedding' column! Run: ALTER TABLE memories ADD COLUMN embedding vector(768);"
+            )
+        elif col_row[1] != "vector" and col_row[0] != "USER-DEFINED":
+            logger.error(
+                f"Memories 'embedding' column type is {col_row[1]} instead of vector(768)! "
+                "Fix with: ALTER TABLE memories ALTER COLUMN embedding TYPE vector(768);"
+            )
+
+        idx_row = session.execute(text(
+            "SELECT indexname FROM pg_indexes "
+            "WHERE tablename = 'memories' AND indexname = 'ix_memories_embedding_hnsw';"
+        )).fetchone()
+        if not idx_row:
+            logger.error(
+                "HNSW index 'ix_memories_embedding_hnsw' missing on memories table! "
+                "Fix with: CREATE INDEX IF NOT EXISTS ix_memories_embedding_hnsw "
+                "ON memories USING hnsw (embedding vector_cosine_ops);"
+            )
+    except Exception as ex:
+        logger.error(f"Error checking PostgreSQL memory schema: {ex}")
+

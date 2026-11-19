@@ -11,6 +11,7 @@ from backend.app.core.config import settings
 from backend.app.core.telemetry import setup_langsmith
 from backend.app.database.connection import engine, Base, SessionLocal, get_database_status
 from backend.app.database.models import MCPServer
+from backend.app.database.memory_search import verify_postgres_memory_schema
 from backend.app.mcp.client import mcp_manager
 from backend.app.mcp.catalog import load_catalog
 from backend.app.mcp.security import validate_command_and_args, MCPSecurityError
@@ -165,6 +166,7 @@ async def startup_event() -> None:
     
     db = SessionLocal()
     try:
+        verify_postgres_memory_schema(db)
         servers = db.query(MCPServer).filter(MCPServer.is_active == True).all()
         logger.info(f"Validating and loading {len(servers)} active MCP servers from database.")
         for server in servers:

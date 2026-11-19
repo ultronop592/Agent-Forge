@@ -449,6 +449,11 @@ AgentForge maintains long-term cross-task memory using dense vector similarity s
 ### Embedding Vector Reuse
 The normalized query embedding computed during the initial retrieval phase is cached in `AgentState.prompt_embedding`. When the task completes and the deliverable is verified, the orchestrator invokes `MemoryAgent.store_memory`, passing the cached vector directly. This eliminates a redundant embedding API call at task completion.
 
+### HNSW Filter Behavior
+pgvector's HNSW index applies category and user filters *after* candidate selection from the index. Highly selective filters (e.g. rare category or per-user scope) can return fewer than `k` results. Mitigations:
+- pgvector >= 0.8: `SET hnsw.iterative_scan = relaxed_order` for iterative indexed scans
+- Increase candidate pool: set `HNSW_EF_SEARCH` environment variable (default: pgvector default of 40)
+
 ### PostgreSQL Migration Utility
 `backend/scripts/migrate_to_postgres.py` transfers existing SQLite data to PostgreSQL:
 - Verifies database connectivity and initializes pgvector.
