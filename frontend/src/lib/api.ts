@@ -8,7 +8,10 @@ export interface HarnessUsage {
   cost_total: number;
   max_cost_usd: number;
   elapsed_seconds: number;
+  paused_seconds?: number;
+  wall_seconds?: number;
   max_seconds: number;
+  max_paused_seconds?: number;
 }
 
 // Utility for fetching JSON

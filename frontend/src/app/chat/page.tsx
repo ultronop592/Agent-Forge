@@ -722,8 +722,28 @@ function WorkspaceInner() {
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-400">
                     <span>Harness Limits</span>
                     <span className="text-[9px] text-zinc-500 font-mono">
-                      {harnessUsage.elapsed_seconds}s / {harnessUsage.max_seconds}s
+                      {harnessUsage.elapsed_seconds}s active / {harnessUsage.max_seconds}s
                     </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-zinc-400">
+                      <span>Active Time</span>
+                      <span className="font-mono text-zinc-200">
+                        {harnessUsage.elapsed_seconds}s / {harnessUsage.max_seconds}s
+                        {harnessUsage.paused_seconds !== undefined && harnessUsage.paused_seconds > 0 && (
+                          <span className="text-zinc-500 text-[9px] ml-1">({harnessUsage.paused_seconds}s paused)</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-purple-500 h-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (harnessUsage.elapsed_seconds / harnessUsage.max_seconds) * 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1">
