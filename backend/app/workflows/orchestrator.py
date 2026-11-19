@@ -2,6 +2,7 @@ import asyncio
 import time
 import json
 import logging
+from contextlib import nullcontext
 from typing import Dict, Any, List, Literal, Optional
 from langgraph.graph import StateGraph, END
 
@@ -189,43 +190,47 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     curr_status = "awaiting_plan_approval"
     start_time = time.monotonic()
 
+    harness = get_current_harness() or get_harness_for_task(task_id)
+    pause_cm = harness.paused("awaiting_plan_approval") if harness else nullcontext()
+
     db = SessionLocal()
     try:
-        while (time.monotonic() - start_time) < timeout_sec:
-            remaining = timeout_sec - (time.monotonic() - start_time)
-            if remaining <= 0:
-                break
-            try:
-                await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
-            except asyncio.TimeoutError:
-                pass
+        with pause_cm:
+            while (time.monotonic() - start_time) < timeout_sec:
+                remaining = timeout_sec - (time.monotonic() - start_time)
+                if remaining <= 0:
+                    break
+                try:
+                    await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
+                except asyncio.TimeoutError:
+                    pass
 
-            db.expire_all()
-            t = db.query(Task).filter(Task.id == task_id).first()
-            curr_status = t.status if t else "failed"
+                db.expire_all()
+                t = db.query(Task).filter(Task.id == task_id).first()
+                curr_status = t.status if t else "failed"
 
-            if curr_status == "running":
-                break
-            elif curr_status in ("cancelled", "failed"):
-                logger.info(f"Task {task_id} was cancelled by user during plan approval.")
-                return {
-                    "subtasks": subtask_dicts,
-                    "current_subtask_index": 0,
-                    "agent_outputs": {},
-                    "agent_sequence": ["Planner"],
-                    "logs": []
-                }
+                if curr_status == "running":
+                    break
+                elif curr_status in ("cancelled", "failed"):
+                    logger.info(f"Task {task_id} was cancelled by user during plan approval.")
+                    return {
+                        "subtasks": subtask_dicts,
+                        "current_subtask_index": 0,
+                        "agent_outputs": {},
+                        "agent_sequence": ["Planner"],
+                        "logs": []
+                    }
 
-            if gate_event.is_set():
-                gate_event.clear()
+                if gate_event.is_set():
+                    gate_event.clear()
 
-        if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_plan_approval":
-            logger.info(f"Task {task_id} HITL plan approval timed out after {timeout_sec}s. Auto-proceeding.")
-            update_task_in_db(task_id, "running")
-            manager_agent.log_db(
-                task_id, None, "manager_decision",
-                f"⏱️ [Manager] No user action within {int(timeout_sec)}s timeout. Auto-proceeding with AI execution plan."
-            )
+            if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_plan_approval":
+                logger.info(f"Task {task_id} HITL plan approval timed out after {timeout_sec}s. Auto-proceeding.")
+                update_task_in_db(task_id, "running")
+                manager_agent.log_db(
+                    task_id, None, "manager_decision",
+                    f"⏱️ [Manager] No user action within {int(timeout_sec)}s timeout. Auto-proceeding with AI execution plan."
+                )
     finally:
         db.close()
         gate_registry.close(task_id)
@@ -602,49 +607,53 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
         gate_event = gate_registry.open(task_id)
         start_time = time.monotonic()
 
+        harness = get_current_harness() or get_harness_for_task(task_id)
+        pause_cm = harness.paused("awaiting_steering") if harness else nullcontext()
+
         db = SessionLocal()
         try:
-            while (time.monotonic() - start_time) < timeout_sec:
-                remaining = timeout_sec - (time.monotonic() - start_time)
-                if remaining <= 0:
-                    break
-                try:
-                    await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
-                except asyncio.TimeoutError:
-                    pass
+            with pause_cm:
+                while (time.monotonic() - start_time) < timeout_sec:
+                    remaining = timeout_sec - (time.monotonic() - start_time)
+                    if remaining <= 0:
+                        break
+                    try:
+                        await asyncio.wait_for(gate_event.wait(), timeout=min(remaining, 5.0))
+                    except asyncio.TimeoutError:
+                        pass
 
-                db.expire_all()
-                t = db.query(Task).filter(Task.id == task_id).first()
-                curr_status = t.status if t else "failed"
+                    db.expire_all()
+                    t = db.query(Task).filter(Task.id == task_id).first()
+                    curr_status = t.status if t else "failed"
 
-                latest_steering_log = (
-                    db.query(AgentLog)
-                    .filter(AgentLog.task_id == task_id, AgentLog.log_type == "steering")
-                    .order_by(AgentLog.id.desc())
-                    .first()
-                )
-                if latest_steering_log:
-                    user_steering = latest_steering_log.content
+                    latest_steering_log = (
+                        db.query(AgentLog)
+                        .filter(AgentLog.task_id == task_id, AgentLog.log_type == "steering")
+                        .order_by(AgentLog.id.desc())
+                        .first()
+                    )
+                    if latest_steering_log:
+                        user_steering = latest_steering_log.content
 
-                if curr_status == "running":
-                    break
-                elif curr_status == "completed":
-                    user_completed = True
-                    break
-                elif curr_status in ("cancelled", "failed"):
-                    logger.info(f"Task {task_id} was cancelled by user during steering.")
-                    break
+                    if curr_status == "running":
+                        break
+                    elif curr_status == "completed":
+                        user_completed = True
+                        break
+                    elif curr_status in ("cancelled", "failed"):
+                        logger.info(f"Task {task_id} was cancelled by user during steering.")
+                        break
 
-                if gate_event.is_set():
-                    gate_event.clear()
+                    if gate_event.is_set():
+                        gate_event.clear()
 
-            if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_steering":
-                logger.info(f"Task {task_id} HITL steering timed out after {timeout_sec}s. Auto-retrying.")
-                update_task_in_db(task_id, "running")
-                manager_agent.log_db(
-                    task_id, None, "manager_decision",
-                    f"⏱️ [Manager] No user steering input within {int(timeout_sec)}s timeout. Auto-retrying with Verifier feedback."
-                )
+                if (time.monotonic() - start_time) >= timeout_sec and curr_status == "awaiting_steering":
+                    logger.info(f"Task {task_id} HITL steering timed out after {timeout_sec}s. Auto-retrying.")
+                    update_task_in_db(task_id, "running")
+                    manager_agent.log_db(
+                        task_id, None, "manager_decision",
+                        f"⏱️ [Manager] No user steering input within {int(timeout_sec)}s timeout. Auto-retrying with Verifier feedback."
+                    )
         finally:
             db.close()
             gate_registry.close(task_id)
