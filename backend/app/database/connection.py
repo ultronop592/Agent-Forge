@@ -1,8 +1,9 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.app.core.config import settings
 
-raw_db_url = settings.database_url or "sqlite:///./agentforge.db"
+raw_db_url = os.environ.get("DATABASE_URL") or settings.database_url or "sqlite:///./agentforge.db"
 # Normalize legacy postgres:// to postgresql:// for SQLAlchemy 1.4+ / 2.0+ compatibility
 if raw_db_url.startswith("postgres://"):
     raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)

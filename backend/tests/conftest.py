@@ -6,16 +6,23 @@ if sys.version_info >= (3, 14):
     sys.modules["numpy"] = None
 
 # Ensure unit tests use local sqlite and disable remote langsmith tracing by default
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_agentforge.db")
-os.environ.setdefault("LANGSMITH_TRACING", "false")
-os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
-os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ["DATABASE_URL"] = "sqlite:///./test_agentforge.db"
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+os.environ["LANGSMITH_API_KEY"] = ""
+os.environ["LANGCHAIN_API_KEY"] = ""
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient
 
 # Add workspace root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+from backend.app.core.config import settings
+settings.database_url = "sqlite:///./test_agentforge.db"
+settings.langsmith_tracing = False
+settings.langsmith_api_key = ""
 
 from backend.app.main import app
 from backend.app.database.connection import Base, engine, SessionLocal

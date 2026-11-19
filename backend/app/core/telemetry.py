@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import asyncio
 import logging
 from typing import Optional, Dict, Any, Callable
 from functools import wraps
@@ -40,6 +41,8 @@ def calculate_cost(prompt_tokens: int, completion_tokens: int, model: Optional[s
 
 
 def is_langsmith_enabled() -> bool:
+    if os.environ.get("LANGSMITH_TRACING", "").lower() in ("false", "0") or os.environ.get("LANGCHAIN_TRACING_V2", "").lower() in ("false", "0"):
+        return False
     has_key = bool(os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY") or settings.langsmith_api_key)
     tracing_flag = (
         os.environ.get("LANGSMITH_TRACING", "").lower() in ("true", "1") or
@@ -50,6 +53,12 @@ def is_langsmith_enabled() -> bool:
 
 
 def setup_langsmith() -> None:
+    if os.environ.get("LANGSMITH_TRACING", "").lower() in ("false", "0") or os.environ.get("LANGCHAIN_TRACING_V2", "").lower() in ("false", "0"):
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        os.environ["LANGSMITH_TRACING"] = "false"
+        logger.info("📊 LangSmith Tracing is DISABLED by environment variable.")
+        return
+
     api_key = os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY") or settings.langsmith_api_key
     project = os.environ.get("LANGSMITH_PROJECT") or os.environ.get("LANGCHAIN_PROJECT") or settings.langsmith_project or "AgentForge"
     endpoint = os.environ.get("LANGSMITH_ENDPOINT") or os.environ.get("LANGCHAIN_ENDPOINT") or settings.langsmith_endpoint or "https://api.smith.langchain.com"
@@ -84,19 +93,38 @@ def agent_traceable(
     metadata: Optional[dict] = None
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        try:
-            from langsmith import traceable
-            trace_func = traceable(
-                name=name or func.__name__,
-                run_type=run_type,
-                tags=tags or ["agentforge"],
-                metadata=metadata or {}
-            )
-            return trace_func(func)
-        except Exception as e:
-            logger.debug(f"LangSmith traceable wrapper skipped: {e}")
+        if asyncio.iscoroutinefunction(func):
             @wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                return func(*args, **kwargs)
-            return wrapper
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if not is_langsmith_enabled():
+                    return await func(*args, **kwargs)
+                try:
+                    from langsmith import traceable
+                    return await traceable(
+                        name=name or func.__name__,
+                        run_type=run_type,
+                        tags=tags or ["agentforge"],
+                        metadata=metadata or {}
+                    )(func)(*args, **kwargs)
+                except Exception as e:
+                    logger.debug(f"LangSmith traceable async execution skipped: {e}")
+                    return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            @wraps(func)
+            def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if not is_langsmith_enabled():
+                    return func(*args, **kwargs)
+                try:
+                    from langsmith import traceable
+                    return traceable(
+                        name=name or func.__name__,
+                        run_type=run_type,
+                        tags=tags or ["agentforge"],
+                        metadata=metadata or {}
+                    )(func)(*args, **kwargs)
+                except Exception as e:
+                    logger.debug(f"LangSmith traceable sync execution skipped: {e}")
+                    return func(*args, **kwargs)
+            return sync_wrapper
     return decorator
