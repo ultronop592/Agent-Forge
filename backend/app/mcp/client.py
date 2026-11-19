@@ -1,19 +1,39 @@
 import asyncio
 import json
 import logging
-import sys
+import shutil
 import uuid
 from typing import Dict, List, Any, Optional
+
+from backend.app.core.config import settings
 from backend.app.harness.harness import get_current_harness
+from backend.app.mcp.security import (
+    validate_command_and_args,
+    get_sanitized_environment,
+    get_posix_preexec_fn,
+    kill_process_group,
+    wrap_untrusted_mcp_output,
+    MCPSecurityError
+)
 
 logger = logging.getLogger("agentforge.mcp")
 logger.setLevel(logging.INFO)
 
+
 class SingleMCPClient:
-    def __init__(self, name: str, command: str, args: List[str]):
+    def __init__(
+        self,
+        name: str,
+        command: str,
+        args: List[str],
+        declared_env_keys: Optional[List[str]] = None,
+        expected_pinned_package: Optional[str] = None
+    ) -> None:
         self.name = name
         self.command = command
         self.args = args
+        self.declared_env_keys = declared_env_keys or []
+        self.expected_pinned_package = expected_pinned_package
         self.process: Optional[asyncio.subprocess.Process] = None
         self.read_task: Optional[asyncio.Task] = None
         self.pending_requests: Dict[str, asyncio.Future] = {}
@@ -24,18 +44,30 @@ class SingleMCPClient:
         try:
             logger.info(f"Starting MCP server '{self.name}' via stdio: {self.command} {' '.join(self.args)}")
             
-            # Use Shell execution for windows compatibility with npx/python
-            cmd_str = f"{self.command} {' '.join(self.args)}"
-            self.process = await asyncio.create_subprocess_shell(
-                cmd_str,
+            allowed = [c.strip() for c in settings.mcp_allowed_commands.split(",") if c.strip()]
+            validate_command_and_args(
+                command=self.command,
+                args=self.args,
+                allowed_commands=allowed,
+                expected_pinned_package=self.expected_pinned_package
+            )
+            
+            safe_env = get_sanitized_environment(self.declared_env_keys)
+            preexec = get_posix_preexec_fn()
+            exe = shutil.which(self.command) or self.command
+            
+            self.process = await asyncio.create_subprocess_exec(
+                exe,
+                *self.args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=safe_env,
+                preexec_fn=preexec
             )
             
             self.read_task = asyncio.create_task(self._read_loop())
             
-            # Handshake
             success = await self._handshake()
             if success:
                 logger.info(f"MCP server '{self.name}' successfully initialized.")
@@ -46,6 +78,9 @@ class SingleMCPClient:
                 logger.error(f"MCP server '{self.name}' handshake failed.")
                 await self.stop()
                 return False
+        except MCPSecurityError as se:
+            logger.error(f"Security validation failed for MCP server '{self.name}': {se}")
+            return False
         except Exception as e:
             logger.error(f"Failed to start MCP server '{self.name}': {str(e)}")
             return False
@@ -70,7 +105,6 @@ class SingleMCPClient:
         await self.process.stdin.drain()
         
         try:
-            # Set a 30s timeout on response
             return await asyncio.wait_for(future, timeout=30.0)
         except asyncio.TimeoutError:
             self.pending_requests.pop(req_id, None)
@@ -88,7 +122,7 @@ class SingleMCPClient:
         self.process.stdin.write(req_bytes)
         await self.process.stdin.drain()
 
-    async def _read_loop(self):
+    async def _read_loop(self) -> None:
         try:
             while self.process and self.process.stdout:
                 line = await self.process.stdout.readline()
@@ -106,10 +140,8 @@ class SingleMCPClient:
                         else:
                             future.set_result(message.get("result"))
                     else:
-                        # Log notifications or unhandled responses
                         logger.debug(f"Received JSON-RPC message without matching callback: {message}")
                 except json.JSONDecodeError:
-                    # Ignore corrupted stdout lines
                     pass
         except asyncio.CancelledError:
             pass
@@ -148,39 +180,53 @@ class SingleMCPClient:
                 "arguments": arguments
             }
             res = await self._send_request("tools/call", params)
-            return res
+            return wrap_untrusted_mcp_output(res)
         except Exception as e:
             logger.error(f"Failed to call tool '{name}' on '{self.name}': {str(e)}")
             return {"content": [{"type": "text", "text": f"Error calling tool {name}: {str(e)}"}], "isError": True}
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self.read_task:
             self.read_task.cancel()
         if self.process:
+            kill_process_group(self.process)
             try:
-                self.process.terminate()
-                await self.process.wait()
+                await asyncio.wait_for(self.process.wait(), timeout=3.0)
             except Exception:
                 pass
         self.initialized = False
         logger.info(f"MCP server '{self.name}' stopped.")
 
+
 class MCPManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.clients: Dict[str, SingleMCPClient] = {}
 
-    async def register_and_start(self, name: str, command: str, args: List[str]) -> bool:
+    async def register_and_start(
+        self,
+        name: str,
+        command: str,
+        args: List[str],
+        declared_env_keys: Optional[List[str]] = None,
+        expected_pinned_package: Optional[str] = None
+    ) -> bool:
         if name in self.clients:
             await self.clients[name].stop()
         
-        client = SingleMCPClient(name, command, args)
+        client = SingleMCPClient(
+            name=name,
+            command=command,
+            args=args,
+            declared_env_keys=declared_env_keys,
+            expected_pinned_package=expected_pinned_package
+        )
         success = await client.start()
         if success:
             self.clients[name] = client
             return True
         return False
 
-    async def stop_all(self):
+    async def stop_all(self) -> None:
         for client in list(self.clients.values()):
             await client.stop()
         self.clients.clear()
@@ -190,7 +236,6 @@ class MCPManager:
         for client_name, client in self.clients.items():
             if client.initialized:
                 for tool in client.tools:
-                    # Enrich tool metadata with server details so we route correctly
                     enriched_tool = tool.copy()
                     enriched_tool["mcp_server_name"] = client_name
                     all_tools.append(enriched_tool)
@@ -202,6 +247,8 @@ class MCPManager:
             harness.authorize(agent_name, tool_name)
         if server_name not in self.clients:
             return {"content": [{"type": "text", "text": f"MCP server '{server_name}' not registered."}], "isError": True}
-        return await self.clients[server_name].call_tool(tool_name, arguments)
+        res = await self.clients[server_name].call_tool(tool_name, arguments)
+        return wrap_untrusted_mcp_output(res)
+
 
 mcp_manager = MCPManager()
