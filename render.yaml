@@ -11,6 +11,14 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: 10000
+      - key: ENVIRONMENT
+        value: production
+      - key: API_SECRET_KEY
+        sync: false
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
       - key: DATABASE_URL
         sync: false # Prompt user to input their Neon Postgres URL
       - key: GEMINI_API_KEY

@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, validation_alias="PORT")
     mcp_servers_json: str = Field(default="[]", validation_alias="MCP_SERVERS_JSON")
     api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
+    admin_api_key: str = Field(default="", validation_alias="ADMIN_API_KEY")
     hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
+    
+    # MCP Security Settings
+    mcp_allowed_commands: str = Field(default="npx,node,python", validation_alias="MCP_ALLOWED_COMMANDS")
+    mcp_allow_dynamic_registration: bool = Field(default=False, validation_alias="MCP_ALLOW_DYNAMIC_REGISTRATION")
+    mcp_allowed_sse_hosts: str = Field(default="", validation_alias="MCP_ALLOWED_SSE_HOSTS")
     
     # SSE Streaming & Concurrency Settings
     sse_db_pool_limit: int = Field(default=5, validation_alias="SSE_DB_POOL_LIMIT")

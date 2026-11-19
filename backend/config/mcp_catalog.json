@@ -1,0 +1,38 @@
+{
+  "catalog": [
+    {
+      "id": "sqlite_explorer",
+      "name": "SQLite Explorer",
+      "description": "Read-only exploration of local SQLite databases",
+      "command": "npx",
+      "fixed_args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite@0.6.2"
+      ],
+      "pinned_package": "@modelcontextprotocol/server-sqlite@0.6.2",
+      "parameters": {
+        "db_path": {
+          "type": "string",
+          "description": "Path to SQLite database file",
+          "pattern": "^[a-zA-Z0-9_./\\\\-]+\\.db$"
+        }
+      },
+      "required_env": [],
+      "needs_network": false
+    },
+    {
+      "id": "fetch_service",
+      "name": "Web Fetch Service",
+      "description": "Converts web page contents to markdown",
+      "command": "npx",
+      "fixed_args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch@0.6.2"
+      ],
+      "pinned_package": "@modelcontextprotocol/server-fetch@0.6.2",
+      "parameters": {},
+      "required_env": [],
+      "needs_network": true
+    }
+  ]
+}
