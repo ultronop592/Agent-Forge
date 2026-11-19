@@ -66,6 +66,9 @@ def ensure_db_schema():
         ("total_cost_usd", "FLOAT DEFAULT 0.0"),
         ("total_latency_ms", "FLOAT DEFAULT 0.0"),
         ("failure_reason", "TEXT"),
+        ("last_heartbeat_at", "DATETIME"),
+        ("owner_instance", "VARCHAR(64)"),
+        ("retry_of", "VARCHAR(36)"),
     ]
     
     log_cols = [

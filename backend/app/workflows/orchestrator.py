@@ -2,6 +2,7 @@ import asyncio
 import time
 import json
 import logging
+from datetime import datetime
 from contextlib import nullcontext
 from typing import Dict, Any, List, Literal, Optional
 from langgraph.graph import StateGraph, END
@@ -11,6 +12,7 @@ from backend.app.workflows.gate_registry import gate_registry
 from backend.app.harness.limits import RunLimits
 from backend.app.harness.errors import BudgetExceeded
 from backend.app.harness.permissions import build_tool_allowlist
+from backend.app.workflows.heartbeat import refresh_heartbeat, BOOT_INSTANCE_ID
 from backend.app.harness.harness import (
     AgentHarness,
     get_current_harness,
@@ -205,6 +207,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
                 except asyncio.TimeoutError:
                     pass
 
+                refresh_heartbeat(task_id)
                 db.expire_all()
                 t = db.query(Task).filter(Task.id == task_id).first()
                 curr_status = t.status if t else "failed"
@@ -622,6 +625,7 @@ async def verifier_node(state: AgentState) -> Dict[str, Any]:
                     except asyncio.TimeoutError:
                         pass
 
+                    refresh_heartbeat(task_id)
                     db.expire_all()
                     t = db.query(Task).filter(Task.id == task_id).first()
                     curr_status = t.status if t else "failed"
@@ -874,6 +878,18 @@ async def run_task_pipeline(
 
     set_current_harness(harness)
     register_harness(task_id, harness)
+
+    db_init = SessionLocal()
+    try:
+        db_init.query(Task).filter(Task.id == task_id).update({
+            Task.owner_instance: BOOT_INSTANCE_ID,
+            Task.last_heartbeat_at: datetime.utcnow()
+        })
+        db_init.commit()
+    except Exception as ex:
+        logger.warning(f"Failed to record initial heartbeat for task {task_id}: {ex}")
+    finally:
+        db_init.close()
 
     initial_state: AgentState = {
         "task_id": task_id,

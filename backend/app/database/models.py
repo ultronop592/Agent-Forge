@@ -59,6 +59,9 @@ class Task(Base):
     total_latency_ms = Column(Float, nullable=True, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_heartbeat_at = Column(DateTime, nullable=True)
+    owner_instance = Column(String, nullable=True)
+    retry_of = Column(String, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
 
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
     logs = relationship("AgentLog", back_populates="task", cascade="all, delete-orphan")
@@ -109,7 +112,10 @@ class Task(Base):
             "total_cost_usd": round(total_cost_usd, 6),
             "total_latency_ms": round(total_latency_ms, 2),
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "last_heartbeat_at": self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None,
+            "owner_instance": self.owner_instance,
+            "retry_of": self.retry_of
         }
 
 

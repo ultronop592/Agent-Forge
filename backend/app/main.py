@@ -12,6 +12,7 @@ from backend.app.core.telemetry import setup_langsmith
 from backend.app.database.connection import engine, Base, SessionLocal, get_database_status
 from backend.app.database.models import MCPServer
 from backend.app.database.memory_search import verify_postgres_memory_schema
+from backend.app.workflows.heartbeat import reap_zombies, reaper_background_loop, handle_graceful_shutdown
 from backend.app.mcp.client import mcp_manager
 from backend.app.mcp.catalog import load_catalog
 from backend.app.mcp.security import validate_command_and_args, MCPSecurityError
@@ -147,8 +148,12 @@ def validate_mcp_entry(name: str, command: str, args: List[str]) -> bool:
         return False
 
 
+_reaper_task: Optional[asyncio.Task] = None
+
+
 @app.on_event("startup")
 async def startup_event() -> None:
+    global _reaper_task
     logger.info("AgentForge application startup initiated.")
 
     validate_production_environment()
@@ -167,6 +172,7 @@ async def startup_event() -> None:
     db = SessionLocal()
     try:
         verify_postgres_memory_schema(db)
+        reap_zombies(db, getattr(settings, "task_stale_seconds", 120))
         servers = db.query(MCPServer).filter(MCPServer.is_active == True).all()
         logger.info(f"Validating and loading {len(servers)} active MCP servers from database.")
         for server in servers:
@@ -211,12 +217,26 @@ async def startup_event() -> None:
         except Exception as e:
             logger.error(f"Failed to load MCP configurations from env json: {e}")
 
+    _reaper_task = asyncio.create_task(reaper_background_loop())
+
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
-    logger.info("AgentForge shutting down, stopping MCP subprocesses...")
+    logger.info("AgentForge shutting down, stopping background tasks and MCP subprocesses...")
+    global _reaper_task
+    if _reaper_task and not _reaper_task.done():
+        _reaper_task.cancel()
+
+    db = SessionLocal()
+    try:
+        handle_graceful_shutdown(db)
+    except Exception as ex:
+        logger.warning(f"Error during graceful shutdown handling: {ex}")
+    finally:
+        db.close()
+
     await mcp_manager.stop_all()
-    logger.info("All MCP subprocesses stopped. Shutdown complete.")
+    logger.info("All background tasks and MCP subprocesses stopped. Shutdown complete.")
 
 
 if __name__ == "__main__":

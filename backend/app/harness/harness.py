@@ -80,6 +80,12 @@ class AgentHarness:
         if self.token_total > self.limits.max_tokens:
             raise BudgetExceeded("max_tokens")
         self.step_count += 1
+        if self.task_id:
+            try:
+                from backend.app.workflows.heartbeat import refresh_heartbeat
+                refresh_heartbeat(self.task_id)
+            except Exception:
+                pass
 
     def record(self, tokens: int, cost_usd: float) -> None:
         self.token_total += int(tokens)

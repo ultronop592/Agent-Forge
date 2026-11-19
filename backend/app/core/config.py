@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     mcp_servers_json: str = Field(default="[]", validation_alias="MCP_SERVERS_JSON")
     api_secret_key: str = Field(default="", validation_alias="API_SECRET_KEY")
     admin_api_key: str = Field(default="", validation_alias="ADMIN_API_KEY")
+    # Runtime Harness & HITL Limits
     hitl_timeout_seconds: float = Field(default=60.0, validation_alias="HITL_TIMEOUT_SECONDS")
+    task_stale_seconds: int = Field(default=120, validation_alias="TASK_STALE_SECONDS")
+    task_reaper_interval_seconds: int = Field(default=60, validation_alias="TASK_REAPER_INTERVAL_SECONDS")
     
     # Idempotency Settings
     idempotency_required: bool = Field(default=False, validation_alias="IDEMPOTENCY_REQUIRED")
