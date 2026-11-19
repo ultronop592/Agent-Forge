@@ -24,7 +24,8 @@ import {
   Check,
   ShieldCheck,
   ChevronDown,
-  FileJson
+  FileJson,
+  AlertCircle
 } from "lucide-react";
 import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
 import SteeringPanel from "@/components/SteeringPanel";
@@ -83,6 +84,16 @@ function WorkspaceInner() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [failureReason, setFailureReason] = useState<string>("");
+  const [idempotencyKey, setIdempotencyKey] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.crypto?.randomUUID) {
+      setIdempotencyKey(window.crypto.randomUUID());
+    } else {
+      setIdempotencyKey(`idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+    }
+  }, []);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
@@ -141,6 +152,7 @@ function WorkspaceInner() {
     setFinalResult("");
     setConfidenceScore(null);
     setHarnessUsage(null);
+    setFailureReason("");
     setActiveTab("graph");
     setIsStreaming(false);
     reconnectAttemptsRef.current = 0;
@@ -157,6 +169,7 @@ function WorkspaceInner() {
       setLogs(data.logs || []);
       setFinalResult(data.final_result || "");
       setConfidenceScore(data.confidence_score);
+      setFailureReason(data.failure_reason || "");
 
       if (data.failure_reason) {
         try {
@@ -317,6 +330,9 @@ function WorkspaceInner() {
         if (payload.harness) {
           setHarnessUsage(payload.harness);
         }
+        if (payload.failure_reason) {
+          setFailureReason(payload.failure_reason);
+        }
 
       } catch (err) {
         console.error("SSE parse error:", err);
@@ -346,7 +362,10 @@ function WorkspaceInner() {
     resetWorkspace();
 
     try {
-      const task = await api.createTask(prompt, selectedPlugin);
+      const task = await api.createTask(prompt, selectedPlugin, idempotencyKey);
+      if (typeof window !== "undefined" && window.crypto?.randomUUID) {
+        setIdempotencyKey(window.crypto.randomUUID());
+      }
       setTaskId(task.id);
       setTaskStatus("running");
       router.replace(`/chat?task_id=${task.id}`);
@@ -354,6 +373,25 @@ function WorkspaceInner() {
     } catch (err) {
       console.error("Failed to deploy task:", err);
       setTaskStatus("failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRetryTask = async () => {
+    if (!taskId || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const retryKey = typeof window !== "undefined" && window.crypto?.randomUUID ? window.crypto.randomUUID() : undefined;
+      const newTask = await api.retryTask(taskId, retryKey);
+      resetWorkspace();
+      setTaskId(newTask.id);
+      setPrompt(newTask.prompt || prompt);
+      setTaskStatus("running");
+      router.replace(`/chat?task_id=${newTask.id}`);
+      connectSSE(newTask.id);
+    } catch (err) {
+      console.error("Failed to retry task:", err);
     } finally {
       setIsSubmitting(false);
     }
@@ -812,6 +850,44 @@ function WorkspaceInner() {
 
         {/* Right Side Column: Tab Viewports (span 8) */}
         <div className="lg:col-span-8 p-6 overflow-y-auto flex flex-col h-full gap-5 bg-[#121214]">
+          {/* Interrupted / Zombie / Failed Task Recovery Banner */}
+          {taskStatus === "failed" && (
+            <div className="p-4 rounded-xl border border-red-500/30 bg-red-950/20 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-red-200">
+                    Task execution interrupted or failed
+                  </div>
+                  <div className="text-xs text-red-300/70">
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(failureReason);
+                        if (parsed.reason === "service_restarted") {
+                          return `Instance restarted. Last status was "${parsed.last_status || "running"}"${
+                            parsed.last_completed_subtask ? ` (completed: ${parsed.last_completed_subtask})` : ""
+                          }.`;
+                        }
+                        if (parsed.reason === "service_shutdown") {
+                          return `Service was shut down gracefully during execution.`;
+                        }
+                      } catch {}
+                      return failureReason || "The task encountered an error or was interrupted by a server restart.";
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleRetryTask}
+                disabled={isSubmitting}
+                className="px-3.5 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCcw className="w-3.5 h-3.5" />
+                <span>Retry Task</span>
+              </button>
+            </div>
+          )}
+
           {/* HITL Plan Approval Gate */}
           {taskStatus === "awaiting_plan_approval" && (
             <PlanEditorCard

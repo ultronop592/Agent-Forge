@@ -113,6 +113,15 @@ export default function Dashboard() {
   const [activeMode, setActiveMode] = useState<ObjectiveMode>("code");
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.crypto?.randomUUID) {
+      setIdempotencyKey(window.crypto.randomUUID());
+    } else {
+      setIdempotencyKey(`idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+    }
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -149,7 +158,10 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      const task = await api.createTask(prompt, selectedPlugin);
+      const task = await api.createTask(prompt, selectedPlugin, idempotencyKey);
+      if (typeof window !== "undefined" && window.crypto?.randomUUID) {
+        setIdempotencyKey(window.crypto.randomUUID());
+      }
       router.push(`/chat?task_id=${task.id}`);
     } catch (err) {
       console.error("Task creation failed:", err);

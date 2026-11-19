@@ -428,6 +428,47 @@ When any threshold is crossed, the harness raises `BudgetExceeded(reason_code)`:
 
 ---
 
+## Task Idempotency, Heartbeats & Zombie Recovery
+
+In multi-tenant or serverless deployments (such as Render free-tier instances subject to spin-downs and deploys), duplicate task submissions and orphaned in-flight tasks pose severe reliability and cost challenges. AgentForge implements a production-grade idempotency and lifecycle supervision engine.
+
+### 1. Request Idempotency (`Idempotency-Key`)
+To eliminate duplicate runs caused by network blips, double-clicks, or reverse proxy retries:
+- **Header**: `POST /api/tasks` accepts an optional `Idempotency-Key` header (8–128 alphanumeric characters, `_`, or `-`).
+- **Storage**: Keys are stored in the `idempotency_keys` table with `UNIQUE(scope, key)`, where `scope` is a SHA-256 hash of the caller's API key (never stored plaintext).
+- **Atomic Creation**: Both the `Task` and `IdempotencyKey` records are committed in a single database transaction. The background `asyncio` task is scheduled strictly *after* commit succeeds.
+- **Replay Behavior**: Submitting the same key with the same canonicalized payload returns the existing task record with HTTP status `200` and the header `Idempotent-Replay: true` without launching a second pipeline.
+- **Conflict Handling**: Submitting the same key with a different request payload immediately fails with `HTTP 422 Unprocessable Entity`.
+- **TTL & Cleanup**: Keys expire after `IDEMPOTENCY_TTL_HOURS` (default: 24h) and are cleaned up opportunistically during incoming requests without background lock overhead.
+
+### 2. Heartbeat Supervision & Zombie Reaper
+In-flight tasks execute as asyncio background coroutines. If the server instance restarts, spins down, or redeploys:
+- **Instance Identity**: Every process generates a unique `BOOT_INSTANCE_ID` (uuid4) upon startup. Active tasks record this in `tasks.owner_instance`.
+- **Heartbeat Tracking**: `tasks.last_heartbeat_at` is updated during active execution:
+  - Invoked automatically in `AgentHarness.before_step()`.
+  - Polled during HITL gate wait periods (`awaiting_plan_approval`, `awaiting_steering`).
+  - Throttled to at most once per 15 seconds per task to minimize DB write pressure.
+- **Zombie Reaper**: A background loop executes every `TASK_REAPER_INTERVAL_SECONDS` (default: 60s) and runs an initial sweep at application startup:
+  - Queries active tasks (`pending`, `running`, `awaiting_plan_approval`, `awaiting_steering`) whose `last_heartbeat_at` (or `updated_at`) is older than `TASK_STALE_SECONDS` (default: 120s).
+  - Overlapping deploy protection: Tasks with fresh heartbeats (<120s) or tasks active in the local memory registry are never reaped.
+  - Stale tasks are transitioned to `status="failed"` with a structured audit JSON in `failure_reason`:
+    ```json
+    {
+      "reason": "service_restarted",
+      "last_status": "running",
+      "last_completed_subtask": "Analyze Competitor Strategy"
+    }
+    ```
+- **Graceful Shutdown**: On `SIGTERM` / application shutdown, active coroutines in `TaskRegistry` are cancelled and owned tasks are marked failed with `{"reason": "service_shutdown"}`.
+
+### 3. Task Retry & Gate Liveness
+- **Gate Safety**: Endpoints (`/approve_plan`, `/steer`, `/reject`) verify task liveness in memory. If a gate action arrives for a task orphaned by a previous restart, it responds with `HTTP 409 Conflict` (`{"detail": "task is no longer active"}`) and marks the dead task failed.
+- **Terminal SSE Close**: Connecting to `/api/tasks/{task_id}/stream` on completed, failed, or cancelled tasks immediately emits the final terminal state and closes the SSE connection without hanging.
+- **Retry Endpoint**: `POST /api/tasks/{task_id}/retry` allows rerunning failed or cancelled tasks. It initializes a new task linked via `retry_of = original_task.id` and honors `Idempotency-Key`.
+- **Future Checkpointing**: Note that currently retried tasks start a fresh pipeline. True mid-pipeline checkpoint resumption is planned for a future release via a persistent LangGraph Checkpointer.
+
+---
+
 ## Vector Memory System
 
 AgentForge maintains long-term cross-task memory using dense vector similarity search, standardizing on 768-dimensional embeddings throughout the system.

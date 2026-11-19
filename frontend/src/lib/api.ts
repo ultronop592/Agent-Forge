@@ -37,10 +37,26 @@ async function def_fetch(endpoint: string, options: RequestInit = {}) {
 
 export const api = {
   // Tasks
-  async createTask(prompt: string, pluginName: string) {
+  async createTask(prompt: string, pluginName: string, idempotencyKey?: string) {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
+    }
     return def_fetch("/tasks", {
       method: "POST",
+      headers,
       body: JSON.stringify({ prompt, plugin_name: pluginName }),
+    });
+  },
+
+  async retryTask(taskId: string, idempotencyKey?: string) {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
+    }
+    return def_fetch(`/tasks/${taskId}/retry`, {
+      method: "POST",
+      headers,
     });
   },
 

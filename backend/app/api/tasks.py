@@ -21,6 +21,7 @@ from backend.app.workflows.orchestrator import orchestrator_graph, run_task_pipe
 from backend.app.workflows.state import AgentState
 from backend.app.workflows.gate_registry import gate_registry
 from backend.app.workflows.task_registry import task_registry
+from backend.app.workflows.heartbeat import BOOT_INSTANCE_ID
 from backend.app.harness.harness import get_harness_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -222,11 +223,147 @@ def delete_task(task_id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Task {task_id} deleted successfully"}
 
+def _check_task_liveness(task: Task, db: Session) -> None:
+    is_live = bool(task_registry.get(task.id) or gate_registry.get(task.id))
+    if not is_live and task.status in ("awaiting_plan_approval", "awaiting_steering"):
+        last_sub = (
+            db.query(Subtask)
+            .filter(Subtask.task_id == task.id, Subtask.status == "completed")
+            .order_by(Subtask.order_index.desc())
+            .first()
+        )
+        task.status = "failed"
+        task.failure_reason = json.dumps({
+            "reason": "service_restarted",
+            "last_status": task.status,
+            "last_completed_subtask": last_sub.title if last_sub else None
+        })
+        log = AgentLog(
+            task_id=task.id,
+            agent_name="Manager",
+            log_type="manager_decision",
+            content="⚠️ [Manager] Task is no longer active in memory. Marked as failed."
+        )
+        db.add(log)
+        db.commit()
+        raise HTTPException(status_code=409, detail="task is no longer active")
+
+
+@router.post("/{task_id}/retry")
+async def retry_task(
+    task_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    original_task = db.query(Task).filter(Task.id == task_id).first()
+    if not original_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if original_task.status not in ("failed", "cancelled"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only failed or cancelled tasks can be retried. Current status is '{original_task.status}'."
+        )
+
+    idempotency_key = request.headers.get("Idempotency-Key")
+    api_key = request.headers.get("X-API-Key") or request.headers.get("Authorization")
+    scope = compute_scope(api_key)
+
+    payload_dict = {"retry_task_id": task_id, "prompt": original_task.prompt, "plugin_name": original_task.plugin_name}
+    request_hash = compute_request_hash(payload_dict)
+
+    if idempotency_key:
+        validate_idempotency_key(idempotency_key)
+        clean_expired_keys(db)
+        now = datetime.utcnow()
+        existing_key = (
+            db.query(IdempotencyKey)
+            .filter(IdempotencyKey.scope == scope, IdempotencyKey.key == idempotency_key)
+            .first()
+        )
+        if existing_key:
+            if existing_key.expires_at >= now:
+                if existing_key.request_hash == request_hash:
+                    t = db.query(Task).filter(Task.id == existing_key.task_id).first()
+                    if t:
+                        return JSONResponse(
+                            content=t.to_dict(),
+                            status_code=existing_key.response_status or 200,
+                            headers={"Idempotent-Replay": "true"}
+                        )
+                else:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Idempotency-Key already used with a different request payload."
+                    )
+            else:
+                db.delete(existing_key)
+                db.commit()
+
+    ttl_hours = getattr(settings, "idempotency_ttl_hours", 24)
+    expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+
+    new_task = Task(
+        prompt=original_task.prompt,
+        plugin_name=original_task.plugin_name,
+        retry_of=original_task.id,
+        owner_instance=BOOT_INSTANCE_ID,
+        status="pending"
+    )
+
+    try:
+        db.add(new_task)
+        db.flush()
+
+        if idempotency_key:
+            idem = IdempotencyKey(
+                scope=scope,
+                key=idempotency_key,
+                request_hash=request_hash,
+                task_id=new_task.id,
+                response_status=200,
+                expires_at=expires_at
+            )
+            db.add(idem)
+
+        db.commit()
+        db.refresh(new_task)
+        is_creator = True
+    except IntegrityError:
+        db.rollback()
+        is_creator = False
+        winning_key = (
+            db.query(IdempotencyKey)
+            .filter(IdempotencyKey.scope == scope, IdempotencyKey.key == idempotency_key)
+            .first()
+        )
+        if winning_key and winning_key.request_hash == request_hash:
+            winning_task = db.query(Task).filter(Task.id == winning_key.task_id).first()
+            if winning_task:
+                return JSONResponse(
+                    content=winning_task.to_dict(),
+                    status_code=winning_key.response_status or 200,
+                    headers={"Idempotent-Replay": "true"}
+                )
+        raise HTTPException(
+            status_code=422,
+            detail="Idempotency-Key already used with a different request payload."
+        )
+
+    if is_creator:
+        async_task = asyncio.create_task(run_workflow_async(new_task.id, new_task.prompt, new_task.plugin_name))
+        task_registry.register(new_task.id, async_task)
+        return JSONResponse(content=new_task.to_dict(), status_code=200)
+
+
 @router.post("/{task_id}/approve_plan")
 def approve_plan(task_id: str, payload: ApprovePlanPayload, db: Session = Depends(get_db)) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    _check_task_liveness(task, db)
 
     if payload.subtasks is not None:
         db.query(Subtask).filter(Subtask.task_id == task_id).delete()
@@ -265,6 +402,8 @@ def steer_task(task_id: str, payload: SteerPayload, db: Session = Depends(get_db
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    _check_task_liveness(task, db)
 
     if payload.action == "force_complete":
         task.status = "completed"
@@ -308,6 +447,8 @@ def reject_task(task_id: str, payload: RejectPayload = RejectPayload(), db: Sess
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    _check_task_liveness(task, db)
 
     task.status = "cancelled"
     db.commit()
@@ -455,6 +596,26 @@ async def stream_task_updates(task_id: str, request: Request = None):
                                         yield f"data: {json.dumps({'event': 'status_change', 'data': {'status': task.status}})}\n\n"
 
                                 if task.status in ("completed", "failed", "cancelled"):
+                                    if not (new_logs or status_changed or subs_updated):
+                                        harness = get_harness_for_task(task_id)
+                                        harness_data = harness.snapshot() if harness else None
+                                        if not harness_data and task.failure_reason:
+                                            try:
+                                                parsed = json.loads(task.failure_reason)
+                                                harness_data = parsed.get("harness")
+                                            except Exception:
+                                                pass
+                                        payload = {
+                                            "task_id":        task_id,
+                                            "status":         task.status,
+                                            "final_result":   task.final_result,
+                                            "failure_reason": task.failure_reason,
+                                            "subtasks":       subs_data,
+                                            "new_logs":       [l.to_dict() for l in new_logs],
+                                            "harness":        harness_data,
+                                        }
+                                        yield f"data: {json.dumps(payload)}\n\n"
+
                                     harness = get_harness_for_task(task_id)
                                     harness_data = harness.snapshot() if harness else None
                                     if not harness_data and task.failure_reason:
