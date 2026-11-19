@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from backend.app.database.connection import get_db
 from backend.app.database.models import Memory
+from backend.app.database.memory_search import search_similar
 from backend.app.agents.memory_agent import MemoryAgent
 
 router = APIRouter(prefix="/memory", tags=["memory"])
@@ -19,23 +20,31 @@ class MemoryCreate(BaseModel):
 def query_memory(
     query: str = Query(default=""),
     category: str = Query(default=""),
+    user_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db)
 ):
     # If query is provided, perform Cosine Similarity Vector Search!
     if query and query.strip():
-        recalled_memories, _ = memory_agent.retrieve_memories(
-            query=query.strip(),
-            category=category if category and category.lower() != "all" else None,
-            top_k=50,
-            min_score=0.15
+        query_vec = memory_agent._normalize_vector(memory_agent.get_embedding(query.strip()))
+        cat_filter = category.strip() if category and category.strip().lower() != "all" else None
+        recalled_memories = search_similar(
+            session=db,
+            query_embedding=query_vec,
+            k=50,
+            min_similarity=0.15,
+            category=cat_filter,
+            user_id=user_id,
+            query_text=query.strip()
         )
         if recalled_memories:
             return recalled_memories
 
         # Keyword fallback if vector similarity returned no high-confidence hits
         q = db.query(Memory)
-        if category and category.strip() and category.lower() != "all":
-            q = q.filter(Memory.category == category)
+        if cat_filter:
+            q = q.filter(Memory.category == cat_filter)
+        if user_id is not None and hasattr(Memory, "user_id"):
+            q = q.filter(getattr(Memory, "user_id") == user_id)
         keyword_filter = f"%{query.strip().lower()}%"
         fallback_mems = q.filter(Memory.content.ilike(keyword_filter)).order_by(Memory.created_at.desc()).limit(50).all()
         return [m.to_dict() for m in fallback_mems]
@@ -43,7 +52,9 @@ def query_memory(
     # Otherwise, return all memories sorted by newest first
     q = db.query(Memory)
     if category and category.strip() and category.lower() != "all":
-        q = q.filter(Memory.category == category)
+        q = q.filter(Memory.category == category.strip())
+    if user_id is not None and hasattr(Memory, "user_id"):
+        q = q.filter(getattr(Memory, "user_id") == user_id)
     
     memories = q.order_by(Memory.created_at.desc()).all()
     return [m.to_dict() for m in memories]

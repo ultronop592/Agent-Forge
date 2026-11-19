@@ -19,6 +19,7 @@ except Exception:
 from backend.app.agents.base import BaseAgent
 from backend.app.database.connection import SessionLocal
 from backend.app.database.models import Memory
+from backend.app.database.memory_search import search_similar, _cosine_similarity
 
 logger = logging.getLogger("agentforge.agents.memory")
 
@@ -57,29 +58,7 @@ class MemoryAgent(BaseAgent):
             return self._normalize_vector([0.1] * 768)
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
-        if len(a) != len(b):
-            return 0.0
-        if _HAS_NUMPY:
-            try:
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    va, vb = np.array(a, dtype=np.float32), np.array(b, dtype=np.float32)
-                    denom = float(np.linalg.norm(va) * np.linalg.norm(vb))
-                    if denom == 0.0:
-                        return 0.0
-                    return float(np.dot(va, vb) / denom)
-            except Exception:
-                pass
-
-
-        dot_product = sum(x * y for x, y in zip(a, b))
-        norm_a = sum(x * x for x in a) ** 0.5
-        norm_b = sum(y * y for y in b) ** 0.5
-        if norm_a == 0.0 or norm_b == 0.0:
-            return 0.0
-        return dot_product / (norm_a * norm_b)
-
+        return _cosine_similarity(a, b)
 
     def retrieve_memories(
         self,
@@ -87,80 +66,21 @@ class MemoryAgent(BaseAgent):
         category: Optional[str] = None,
         top_k: int = 5,
         min_score: float = 0.45,
+        user_id: Optional[str] = None,
     ) -> tuple[List[Dict[str, Any]], List[float]]:
         db = SessionLocal()
         try:
             query_vector = self._normalize_vector(self.get_embedding(query))
-
-            is_sqlite = False
-            try:
-                if db.bind:
-                    is_sqlite = (db.bind.dialect.name == "sqlite")
-            except Exception:
-                is_sqlite = True
-
-            if not is_sqlite and hasattr(Memory, "embedding"):
-                try:
-                    dist_expr = Memory.embedding.cosine_distance(query_vector)
-                    sim_expr = (1.0 - dist_expr).label("similarity_score")
-
-                    q = db.query(Memory, sim_expr).filter(Memory.embedding.isnot(None))
-                    if category and category.strip() and category.strip().lower() != "all":
-                        q = q.filter(Memory.category == category.strip())
-
-                    q = q.filter(dist_expr <= (1.0 - min_score))
-                    q = q.order_by(dist_expr.asc()).limit(top_k)
-
-                    rows = q.all()
-                    if rows:
-                        results = []
-                        for mem, sim in rows:
-                            sim_score = max(0.0, float(sim))
-                            mem_dict = mem.to_dict()
-                            mem_dict["similarity_score"] = round(sim_score, 4)
-                            mem_dict["match_percentage"] = f"{int(round(sim_score * 100))}%"
-                            results.append(mem_dict)
-                        return results, query_vector
-                except Exception as pg_err:
-                    logger.warning(f"Native pgvector query failed, falling back to Python scan: {pg_err}")
-
-            db_query = db.query(Memory)
-            if category and category.strip() and category.strip().lower() != "all":
-                db_query = db_query.filter(Memory.category == category)
-
-            all_mems = db_query.all()
-
-            results = []
-            for mem in all_mems:
-                score = 0.0
-                content_lower = mem.content.lower()
-
-                if mem.embedding is not None and isinstance(mem.embedding, (list, tuple)) and len(mem.embedding) > 0:
-                    score = self._cosine_similarity(query_vector, self._normalize_vector(list(mem.embedding)))
-                elif mem.embedding_searchable_text:
-                    try:
-                        vector = json.loads(mem.embedding_searchable_text)
-                        if isinstance(vector, list) and len(vector) > 0 and isinstance(vector[0], (int, float)):
-                            score = self._cosine_similarity(query_vector, self._normalize_vector(vector))
-                    except Exception:
-                        score = 0.0
-
-                if score < 0.10:
-                    words = query.lower().split()
-                    word_matches = sum(1 for w in words if len(w) > 3 and w in content_lower)
-                    if words:
-                        score = (word_matches / len(words)) * 0.35
-
-                if score >= min_score:
-                    mem_dict = mem.to_dict()
-                    mem_dict["similarity_score"] = round(score, 4)
-                    mem_dict["match_percentage"] = f"{int(round(score * 100))}%"
-                    results.append((score, mem_dict))
-
-            results.sort(key=lambda x: x[0], reverse=True)
-            top_memories = [item[1] for item in results[:top_k]]
-            return top_memories, query_vector
-
+            results = search_similar(
+                session=db,
+                query_embedding=query_vector,
+                k=top_k,
+                min_similarity=min_score,
+                category=category,
+                user_id=user_id,
+                query_text=query
+            )
+            return results, query_vector
         except Exception as e:
             logger.error(f"Memory recall error: {e}")
             self.log_db("SYSTEM", None, "error", f"Memory recall error: {str(e)}")
@@ -174,12 +94,18 @@ class MemoryAgent(BaseAgent):
         category: str = "factual",
         embedding: Optional[List[float]] = None,
     ) -> Dict[str, Any]:
+        if embedding is not None and len(embedding) != 768:
+            raise ValueError(f"Expected 768-dim embedding, got {len(embedding)}")
+
         db = SessionLocal()
         try:
-            if embedding is not None and len(embedding) == 768:
+            if embedding is not None:
                 embedding_vector = self._normalize_vector(embedding)
             else:
                 embedding_vector = self.get_embedding(content)
+
+            if len(embedding_vector) != 768:
+                raise ValueError(f"Expected 768-dim embedding, got {len(embedding_vector)}")
 
             embedding_json = json.dumps(embedding_vector)
 
