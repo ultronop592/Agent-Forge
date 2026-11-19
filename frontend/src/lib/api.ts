@@ -190,20 +190,46 @@ export const api = {
   },
 
   // MCP Servers
+  async getMCPCatalog() {
+    return def_fetch("/mcp/catalog");
+  },
+
   async getMCPServers() {
     return def_fetch("/mcp/servers");
   },
 
-  async addMCPServer(name: string, command: string, args: string[] = []) {
+  async enableMCPServer(catalogId: string, parameters: Record<string, any> = {}, adminKey?: string) {
+    const headers: Record<string, string> = {};
+    if (adminKey) {
+      headers["X-Admin-Key"] = adminKey;
+    }
     return def_fetch("/mcp/servers", {
       method: "POST",
+      headers,
+      body: JSON.stringify({ catalog_id: catalogId, parameters }),
+    });
+  },
+
+  async addMCPServer(name: string, command: string, args: string[] = [], adminKey?: string) {
+    const headers: Record<string, string> = {};
+    if (adminKey) {
+      headers["X-Admin-Key"] = adminKey;
+    }
+    return def_fetch("/mcp/servers", {
+      method: "POST",
+      headers,
       body: JSON.stringify({ name, command, args }),
     });
   },
 
-  async removeMCPServer(name: string) {
+  async removeMCPServer(name: string, adminKey?: string) {
+    const headers: Record<string, string> = {};
+    if (adminKey) {
+      headers["X-Admin-Key"] = adminKey;
+    }
     return def_fetch(`/mcp/servers/${name}`, {
       method: "DELETE",
+      headers,
     });
   },
 

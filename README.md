@@ -481,11 +481,44 @@ AgentForge Client                              MCP Server Subprocess
        |<-- 7. { result: { content: [...] } } ----------|
 ```
 
-### Server Management
-- MCP servers can be configured in the database via the `/mcp` UI page or pre-loaded via the `MCP_SERVERS_JSON` environment variable.
-- Supported transports: `stdio` (subprocess execution) and `sse` (remote HTTP streaming).
-- All requests use UUID correlation identifiers and enforce a 30-second timeout.
-- On application shutdown, `MCPManager` gracefully terminates all active subprocesses.
+### Security Architecture and RCE Elimination
+
+To eliminate remote code execution risks and protect resource-constrained deployments (512 MB RAM), MCP server execution is governed by six strict security controls:
+
+1. **Pre-Vetted Catalog Enablement**: Arbitrary command registration is disabled by default (`MCP_ALLOW_DYNAMIC_REGISTRATION=false`). Servers are enabled strictly through the pre-vetted catalog defined in `backend/config/mcp_catalog.json`. Each entry defines a fixed binary executable, pinned package version, network requirements, and strict parameter regex validation schemas. User input is never placed in executable or arbitrary argument positions.
+2. **Subprocess Hardening Choke Point**: Process execution in `backend/app/mcp/client.py` uses direct positional arguments via `asyncio.create_subprocess_exec` rather than shell strings. Commands are validated against an exact-match allowlist (`MCP_ALLOWED_COMMANDS`). Inline evaluation flags (`-c`, `-e`, `--eval`, `-r`, `--import`) and shell metacharacters are rejected.
+3. **Environment Isolation**: Child processes execute with a minimal scrubbed environment containing only system `PATH` and temporary directories. Sensitive parent environment variables (`GEMINI_API_KEY`, `TAVILY_API_KEY`, `DATABASE_URL`, `API_SECRET_KEY`, `ADMIN_API_KEY`) are stripped.
+4. **Resource Quotas and Process Groups**: On POSIX runtimes, child processes are sandboxed via `setrlimit` (`RLIMIT_AS` capped at 256 MB, `RLIMIT_CPU` at 60s, `RLIMIT_NOFILE` at 128, `RLIMIT_NPROC` at 16). Subprocesses run in dedicated sessions (`os.setsid`) and are terminated across the entire process group upon timeout or shutdown.
+5. **Administrative Separation and Auditability**: Server enablement, modification, and deletion require the `X-Admin-Key` header verified against `ADMIN_API_KEY` via `hmac.compare_digest`. When unset, administrative endpoints fail closed with HTTP 403. Every administrative action is logged to the `audit_logs` table with a 16-character SHA-256 hash of the actor key (never the raw key).
+6. **SSRF Prevention for Remote SSE**: Remote MCP SSE endpoints must use `https://` and adhere to `MCP_ALLOWED_SSE_HOSTS`. Hostnames are resolved via DNS, and private, loopback, link-local, and cloud metadata (`169.254.169.254`) IP addresses are rejected with DNS rebinding protection and disabled redirects.
+
+### Manual Verification Commands
+
+The following curl commands verify MCP security controls against an active server deployment:
+
+```bash
+# 1. Attempt arbitrary command execution (expect 403 Forbidden or 422 Unprocessable Entity)
+curl -s -X POST http://localhost:8000/api/mcp/servers \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_api_key" \
+  -d '{"name": "evil", "command": "python", "args": ["-c", "import os; os.system(\"id\")"]}'
+
+# 2. Attempt administrative access without admin key (expect 403 Forbidden)
+curl -s -X POST http://localhost:8000/api/mcp/servers \
+  -H "Content-Type: application/json" \
+  -d '{"catalog_id": "fetch_service"}'
+
+# 3. Enable safe catalog server with valid admin key (expect 200 OK)
+curl -s -X POST http://localhost:8000/api/mcp/servers \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_api_key" \
+  -d '{"catalog_id": "fetch_service"}'
+
+# 4. Attempt unauthenticated task request when API_SECRET_KEY is configured (expect 401 Unauthorized)
+curl -s -X POST http://localhost:8000/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Audit verification query", "plugin_name": "general_analysis"}'
+```
 
 ---
 
@@ -728,6 +761,16 @@ The script:
 | `url` | String | Nullable | Endpoint URL for SSE transport |
 | `is_active` | Boolean | Default: True | Server enablement flag |
 
+### `audit_logs` Table
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | String UUID | Primary Key | Unique audit log identifier |
+| `action` | String | Not Null | Operation executed: enable_server, register_server, delete_server |
+| `target_id` | String | Not Null | Target server name or catalog identifier |
+| `actor` | String | Not Null | 16-character SHA-256 hash of the admin key (never raw key) |
+| `details` | Text | Nullable | Serialized JSON parameters or execution status |
+| `created_at` | DateTime | Default: UTC now | Event timestamp |
+
 ---
 
 ## API Reference
@@ -872,7 +915,7 @@ agentforge/
 |   |   |   +-- stream.py               Server-Sent Events connection and broadcast manager
 |   |   +-- database/
 |   |   |   +-- connection.py           Database engine setup, session factories, schema migration
-|   |   |   +-- models.py               SQLAlchemy ORM models: Task, Subtask, AgentLog, Memory, MCPServer
+|   |   |   +-- models.py               SQLAlchemy ORM models: Task, Subtask, AgentLog, Memory, MCPServer, AuditLog
 |   |   +-- evals/
 |   |   |   +-- datasets.py             Standardized benchmark test case definitions
 |   |   |   +-- evaluator.py            LLMJudgeEvaluator with five-dimension scoring
@@ -884,7 +927,9 @@ agentforge/
 |   |   |   +-- errors.py               BudgetExceeded and ToolDenied exception types
 |   |   |   +-- harness.py              AgentHarness runtime monitor and authorization engine
 |   |   +-- mcp/
+|   |   |   +-- catalog.py              Pre-vetted catalog loader and parameter schema validation
 |   |   |   +-- client.py               SingleMCPClient (stdio/sse) and MCPManager
+|   |   |   +-- security.py             Subprocess hardening, flag denylist, and SSRF prevention
 |   |   +-- plugins/
 |   |   |   +-- base_plugin.py          Abstract BaseWorkflowPlugin interface
 |   |   |   +-- registry.py             Plugin registration and discovery system
@@ -902,6 +947,7 @@ agentforge/
 |   |   |   +-- task_registry.py        Active asyncio.Task registry for task cancellation
 |   |   +-- main.py                     FastAPI application factory, CORS, and lifespan events
 |   +-- config/
+|   |   +-- mcp_catalog.json            Pre-vetted catalog of lightweight MCP server definitions
 |   |   +-- model_prices.json           Dynamic per-million token pricing for models
 |   +-- eval_results/
 |   |   +-- latest_eval_report.json     Machine-readable benchmark report
@@ -913,6 +959,7 @@ agentforge/
 |   |   +-- integration/
 |   |   |   +-- test_api_tasks.py       Integration tests for API endpoints
 |   |   +-- unit/
+|   |       +-- test_mcp_security.py    MCP catalog, subprocess hardening, and admin key tests
 |   |       +-- test_harness.py         Harness limits, permissions, and cancellation unit tests
 |   |       +-- test_memory_agent.py    768-dim cosine similarity and normalization tests
 |   |       +-- test_orchestrator_routing.py Routing logic and retry step counting tests
@@ -971,6 +1018,7 @@ All settings are configured via environment variables. Create a `.env` file in t
 | `ENVIRONMENT` | `development` | Deployment environment: `development`, `staging`, or `production` |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
 | `API_SECRET_KEY` | None | Secret key required for API access when locked mode is active |
+| `ADMIN_API_KEY` | None | Secret key required for MCP server management (fails closed when unset) |
 | `HITL_TIMEOUT_SECONDS` | `60.0` | Timeout in seconds before HITL gates auto-proceed |
 | `HARNESS_MAX_STEPS` | `25` | Maximum total graph execution steps allowed per task |
 | `HARNESS_MAX_SECONDS` | `300.0` | Maximum wall-clock execution duration in seconds per task |
@@ -979,6 +1027,9 @@ All settings are configured via environment variables. Create a `.env` file in t
 | `RATE_LIMIT_ENABLED` | `true` | Enables sliding window rate limiting |
 | `RATE_LIMIT_PER_MINUTE` | `60` | Maximum allowed requests per minute per client |
 | `MCP_SERVERS_JSON` | `[]` | JSON array of MCP server configuration objects loaded at launch |
+| `MCP_ALLOWED_COMMANDS` | `npx,node,python` | Comma-separated allowlist of permitted binary names for MCP processes |
+| `MCP_ALLOW_DYNAMIC_REGISTRATION` | `false` | When false, only pre-vetted catalog entries may be enabled |
+| `MCP_ALLOWED_SSE_HOSTS` | Empty | Comma-separated allowlist of permitted hostnames for remote SSE MCP servers |
 | `LANGSMITH_TRACING` | `false` | Enables LangSmith distributed tracing |
 | `LANGSMITH_API_KEY` | None | API key for LangSmith tracing platform |
 | `LANGSMITH_PROJECT` | `AgentForge` | Project identifier for LangSmith trace groupings |
