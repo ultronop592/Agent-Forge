@@ -229,3 +229,24 @@ class MCPServer(Base):
             "url": self.url,
             "is_active": self.is_active
         }
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    action = Column(String, nullable=False)
+    target_id = Column(String, nullable=False)
+    actor = Column(String, nullable=False)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "action": self.action,
+            "target_id": self.target_id,
+            "actor": self.actor,
+            "details": self.details,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }

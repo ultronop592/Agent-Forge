@@ -99,11 +99,23 @@ def ensure_db_schema():
                     conn.commit()
                 except Exception:
                     pass
+
+                try:
+                    conn.execute(text("CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY, action TEXT NOT NULL, target_id TEXT NOT NULL, actor TEXT NOT NULL, details TEXT, created_at DATETIME)"))
+                    conn.commit()
+                except Exception:
+                    pass
         else:
             with engine.connect() as conn:
                 # 1. Enable pgvector extension
                 try:
                     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+                try:
+                    conn.execute(text("CREATE TABLE IF NOT EXISTS audit_logs (id VARCHAR PRIMARY KEY, action VARCHAR NOT NULL, target_id VARCHAR NOT NULL, actor VARCHAR NOT NULL, details TEXT, created_at TIMESTAMP)"))
                     conn.commit()
                 except Exception:
                     pass
