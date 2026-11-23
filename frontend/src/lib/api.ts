@@ -80,9 +80,10 @@ async function def_fetch(endpoint: string, options: RequestInit = {}) {
     ...(apiKey ? { "X-API-Key": apiKey } : {}),
     ...(options.headers as Record<string, string>),
   };
+  // Spread options first, then override headers so Content-Type is never overwritten
   const response = await fetch(url, {
-    headers,
     ...options,
+    headers,
   });
 
   if (!response.ok) {
