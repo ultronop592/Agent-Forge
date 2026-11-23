@@ -1,5 +1,62 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
+export interface PluginItem {
+  plugin_id: string;
+  name: string;
+  description: string;
+}
+
+export const DEFAULT_PLUGINS: PluginItem[] = [
+  {
+    plugin_id: "software_debugging",
+    name: "Software Debugging",
+    description: "Diagnose stack traces, identify root-cause bugs, and generate verified code fixes."
+  },
+  {
+    plugin_id: "general_analysis",
+    name: "General Technical Analysis",
+    description: "Multi-perspective technical tradeoff, architecture evaluation, and comprehensive research."
+  },
+  {
+    plugin_id: "startup_research",
+    name: "Startup Research & SWOT",
+    description: "Grounded competitive intelligence, market sizing, industry analysis, and SWOT matrix."
+  },
+  {
+    plugin_id: "code_review",
+    name: "Code Health & Review",
+    description: "Multi-dimensional static analysis, security auditing, and code maintainability review."
+  },
+  {
+    plugin_id: "document_qa",
+    name: "Document & Knowledge QA",
+    description: "Knowledge extraction, policy verification, and structured Q&A from technical documents."
+  }
+];
+
+export function getStoredApiKey(): string {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("agentforge_api_key") || "";
+  }
+  return "";
+}
+
+export function setStoredApiKey(key: string): void {
+  if (typeof window !== "undefined") {
+    if (key.trim()) {
+      localStorage.setItem("agentforge_api_key", key.trim());
+    } else {
+      localStorage.removeItem("agentforge_api_key");
+    }
+  }
+}
+
+export function getEffectiveApiKey(): string {
+  const stored = getStoredApiKey();
+  if (stored) return stored;
+  return process.env.NEXT_PUBLIC_API_KEY || "";
+}
+
 export interface HarnessUsage {
   step_count: number;
   max_steps: number;
@@ -17,7 +74,7 @@ export interface HarnessUsage {
 // Utility for fetching JSON
 async function def_fetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
+  const apiKey = getEffectiveApiKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(apiKey ? { "X-API-Key": apiKey } : {}),
@@ -113,7 +170,7 @@ export const api = {
 
   /** Trigger a file download for the given export format */
   async downloadExport(taskId: string, format: "md" | "pdf" | "zip"): Promise<void> {
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
+    const apiKey = getEffectiveApiKey();
     const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/export?format=${format}`, {
       headers: apiKey ? { "X-API-Key": apiKey } : {},
     });
@@ -169,8 +226,17 @@ export const api = {
   },
 
   // Plugins
-  async getPlugins() {
-    return def_fetch("/plugins");
+  async getPlugins(): Promise<PluginItem[]> {
+    try {
+      const data = await def_fetch("/plugins");
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+      return DEFAULT_PLUGINS;
+    } catch (e) {
+      console.warn("Could not fetch plugins from server, using default plugins:", e);
+      return DEFAULT_PLUGINS;
+    }
   },
 
   // Memory

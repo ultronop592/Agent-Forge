@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { api } from "@/lib/api";
+import { api, getStoredApiKey, setStoredApiKey } from "@/lib/api";
 import { 
   Sliders, 
   Cpu, 
@@ -23,7 +23,8 @@ import {
   BrainCircuit, 
   Users,
   Activity,
-  CheckCheck
+  CheckCheck,
+  Key
 } from "lucide-react";
 
 interface AgentConfig {
@@ -70,6 +71,23 @@ export default function SettingsPage() {
   const [tokenBudget, setTokenBudget] = useState<number>(3000);
   const [customInstruction, setCustomInstruction] = useState<string>("");
   const [isInheritedModel, setIsInheritedModel] = useState<boolean>(true);
+
+  // API Key state
+  const [apiKey, setApiKey] = useState<string>("");
+  const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  const [apiKeySaved, setApiKeySaved] = useState<boolean>(false);
+
+  useEffect(() => {
+    setApiKey(getStoredApiKey());
+  }, []);
+
+  const handleSaveApiKey = () => {
+    setStoredApiKey(apiKey);
+    setApiKeySaved(true);
+    showToast("Backend API Secret Key saved!");
+    setTimeout(() => setApiKeySaved(false), 3000);
+    loadConfigs();
+  };
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -262,6 +280,58 @@ export default function SettingsPage() {
             <Save className="w-3.5 h-3.5" />
             <span>{saving ? "Saving..." : "Save Settings"}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Backend API Authentication Key */}
+      <div className="bg-[#161619] border border-zinc-800 rounded-2xl p-5 space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#da7756]/15 border border-[#da7756]/30 text-[#da7756] flex items-center justify-center shrink-0">
+              <Key className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Backend API Secret Key</h3>
+                {apiKey ? (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    Configured
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
+                    Optional / Local Dev
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                If your Render deployment has <code className="text-[#da7756] bg-zinc-900 px-1 py-0.5 rounded">API_SECRET_KEY</code> set, enter it here to authorize task dispatch.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start md:self-auto w-full md:w-auto">
+            <input
+              type={showApiKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter API_SECRET_KEY..."
+              className="bg-[#121214] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#da7756] w-full md:w-64 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowApiKey(!showApiKey)}
+              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+            >
+              {showApiKey ? "Hide" : "Show"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveApiKey}
+              className="px-4 py-2 rounded-xl bg-[#da7756] hover:bg-[#c96a4a] text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>{apiKeySaved ? "Saved!" : "Save Key"}</span>
+            </button>
+          </div>
         </div>
       </div>
 
