@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, DEFAULT_PLUGINS } from "@/lib/api";
 import { PocketKnife, Puzzle, Download, ArrowUpRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 
@@ -12,14 +12,16 @@ interface Plugin {
 }
 
 export default function PluginsDirectory() {
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [plugins, setPlugins] = useState<Plugin[]>(DEFAULT_PLUGINS);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const loadPlugins = async () => {
       try {
         const data = await api.getPlugins();
-        setPlugins(data);
+        if (data && data.length > 0) {
+          setPlugins(data);
+        }
       } catch (e) {
         console.error("Failed to load plugins:", e);
       } finally {

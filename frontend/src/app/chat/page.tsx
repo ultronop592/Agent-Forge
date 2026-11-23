@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { api, HarnessUsage } from "@/lib/api";
+import { api, HarnessUsage, DEFAULT_PLUGINS, getStoredApiKey, setStoredApiKey } from "@/lib/api";
 import WorkflowGraph from "@/components/WorkflowGraph";
 import Timeline from "@/components/Timeline";
 import AgentTerminal from "@/components/AgentTerminal";
@@ -25,7 +25,8 @@ import {
   ShieldCheck,
   ChevronDown,
   FileJson,
-  AlertCircle
+  AlertCircle,
+  Key
 } from "lucide-react";
 import PlanEditorCard, { EditableSubtask } from "@/components/PlanEditorCard";
 import SteeringPanel from "@/components/SteeringPanel";
@@ -62,12 +63,18 @@ function WorkspaceInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const targetTaskId = searchParams.get("task_id");
+  const targetPluginId = searchParams.get("plugin_id");
 
   const [prompt, setPrompt] = useState("");
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [selectedPlugin, setSelectedPlugin] = useState("");
+  const [plugins, setPlugins] = useState<Plugin[]>(DEFAULT_PLUGINS);
+  const [selectedPlugin, setSelectedPlugin] = useState<string>("general_analysis");
   const [taskId, setTaskId] = useState<string | null>(null);
   
+  // Auth & API Key state
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [authError, setAuthError] = useState(false);
+
   // Running state
   const [taskStatus, setTaskStatus] = useState<string>("idle");
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
@@ -110,16 +117,20 @@ function WorkspaceInner() {
     const loadPlugins = async () => {
       try {
         const data = await api.getPlugins();
-        setPlugins(data);
-        if (data.length > 0) {
-          setSelectedPlugin(data[0].plugin_id);
+        if (data && data.length > 0) {
+          setPlugins(data);
+          if (targetPluginId && data.some(p => p.plugin_id === targetPluginId)) {
+            setSelectedPlugin(targetPluginId);
+          } else if (!selectedPlugin) {
+            setSelectedPlugin(data[0].plugin_id);
+          }
         }
       } catch (e) {
         console.error("Failed to load plugins:", e);
       }
     };
     loadPlugins();
-  }, []);
+  }, [targetPluginId]);
 
   // Close export menu on click outside
   useEffect(() => {
@@ -356,13 +367,14 @@ function WorkspaceInner() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isSubmitting || !selectedPlugin) return;
+    const effectivePlugin = selectedPlugin || (plugins.length > 0 ? plugins[0].plugin_id : "general_analysis");
+    if (!prompt.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     resetWorkspace();
 
     try {
-      const task = await api.createTask(prompt, selectedPlugin, idempotencyKey);
+      const task = await api.createTask(prompt, effectivePlugin, idempotencyKey);
       if (typeof window !== "undefined" && window.crypto?.randomUUID) {
         setIdempotencyKey(window.crypto.randomUUID());
       }
@@ -370,9 +382,14 @@ function WorkspaceInner() {
       setTaskStatus("running");
       router.replace(`/chat?task_id=${task.id}`);
       connectSSE(task.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to deploy task:", err);
       setTaskStatus("failed");
+      const msg = err?.message || String(err);
+      if (msg.includes("401") || msg.includes("API Secret Key") || msg.includes("Unauthorized")) {
+        setAuthError(true);
+        setShowApiKeyModal(true);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -513,6 +530,63 @@ function WorkspaceInner() {
         isLoading={isDeleting}
         errorMessage={deleteError}
       />
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-[#18181b] border border-zinc-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#da7756]/15 border border-[#da7756]/30 flex items-center justify-center text-[#da7756]">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">API Authentication Required</h3>
+                <p className="text-[11px] text-zinc-400">Your AgentForge backend requires an API Secret Key.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
+                API Secret Key
+              </label>
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Enter API_SECRET_KEY..."
+                className="w-full bg-[#121214] border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#da7756]"
+              />
+              <p className="text-[10px] text-zinc-500">
+                Key will be saved securely in your browser and included with all workforce requests.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowApiKeyModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (apiKeyInput.trim()) {
+                    setStoredApiKey(apiKeyInput.trim());
+                    setShowApiKeyModal(false);
+                    setAuthError(false);
+                    api.getPlugins().then(data => {
+                      if (data.length > 0) setPlugins(data);
+                    });
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#da7756] hover:bg-[#c96a4a] transition cursor-pointer"
+              >
+                Save & Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upper Navigation Header */}
       <div className="border-b border-zinc-800/80 bg-[#161619] px-7 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -668,11 +742,14 @@ function WorkspaceInner() {
                         key={mode.id}
                         type="button"
                         onClick={() => {
-                          const match = plugins.find(p => p.plugin_id === mode.plugin);
-                          if (match) setSelectedPlugin(match.plugin_id);
+                          setSelectedPlugin(mode.plugin);
                           setPrompt(mode.prompt);
                         }}
-                        className="p-2 rounded-xl bg-[#121214] border border-zinc-800 hover:border-[#da7756]/50 text-left text-xs font-semibold text-zinc-300 hover:text-white transition cursor-pointer"
+                        className={`p-2 rounded-xl text-left text-xs font-semibold transition cursor-pointer ${
+                          selectedPlugin === mode.plugin
+                            ? "bg-[#da7756]/15 border border-[#da7756] text-white shadow-sm"
+                            : "bg-[#121214] border border-zinc-800 hover:border-[#da7756]/50 text-zinc-300 hover:text-white"
+                        }`}
                       >
                         {mode.label}
                       </button>
@@ -681,9 +758,14 @@ function WorkspaceInner() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
-                    1. Target Plugin Workflow
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                      1. Target Plugin Workflow
+                    </label>
+                    <span className="text-[9px] text-zinc-500 font-mono">
+                      {plugins.length} available
+                    </span>
+                  </div>
                   <select 
                     value={selectedPlugin}
                     onChange={(e) => setSelectedPlugin(e.target.value)}
@@ -696,7 +778,7 @@ function WorkspaceInner() {
                     ))}
                   </select>
                   <p className="text-[10px] text-zinc-500 leading-normal font-medium pt-0.5">
-                    {plugins.find(p => p.plugin_id === selectedPlugin)?.description}
+                    {plugins.find(p => p.plugin_id === selectedPlugin)?.description || "Select a workforce workflow template to orchestrate agent roles."}
                   </p>
                 </div>
 
@@ -712,6 +794,25 @@ function WorkspaceInner() {
                     className="w-full bg-[#121214] border border-zinc-800 rounded-xl p-3.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#da7756]/60 transition leading-relaxed resize-none"
                   />
                 </div>
+
+                {authError && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>API Secret Key required to run workforce tasks.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setApiKeyInput(getStoredApiKey());
+                        setShowApiKeyModal(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[10px] font-bold transition cursor-pointer"
+                    >
+                      Enter Key
+                    </button>
+                  </div>
+                )}
 
                 <button 
                   type="submit"

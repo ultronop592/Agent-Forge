@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, DEFAULT_PLUGINS } from "@/lib/api";
 import { 
   Play, 
   ArrowRight,
@@ -108,8 +108,8 @@ const CAPABILITIES = [
 export default function Dashboard() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [selectedPlugin, setSelectedPlugin] = useState("");
+  const [plugins, setPlugins] = useState<Plugin[]>(DEFAULT_PLUGINS);
+  const [selectedPlugin, setSelectedPlugin] = useState("software_debugging");
   const [activeMode, setActiveMode] = useState<ObjectiveMode>("code");
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,12 +128,14 @@ export default function Dashboard() {
       try {
         const [tasksData, pluginsData] = await Promise.all([
           api.getTasks().catch(() => []),
-          api.getPlugins().catch(() => [])
+          api.getPlugins().catch(() => DEFAULT_PLUGINS)
         ]);
         setTasks(tasksData);
-        setPlugins(pluginsData);
-        if (pluginsData.length > 0) {
-          setSelectedPlugin(pluginsData[0].plugin_id);
+        if (pluginsData && pluginsData.length > 0) {
+          setPlugins(pluginsData);
+          if (!selectedPlugin) {
+            setSelectedPlugin(pluginsData[0].plugin_id);
+          }
         }
       } catch (e) {
         console.error("Failed to load dashboard data:", e);
@@ -144,27 +146,26 @@ export default function Dashboard() {
 
   const handleSelectMode = (mode: typeof MODES[0]) => {
     setActiveMode(mode.id);
-    const matching = plugins.find(p => p.plugin_id === mode.pluginId);
-    if (matching) {
-      setSelectedPlugin(matching.plugin_id);
-    }
+    setSelectedPlugin(mode.pluginId);
   };
 
   const currentModeConfig = MODES.find(m => m.id === activeMode) || MODES[0];
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isSubmitting || !selectedPlugin) return;
+    const effectivePlugin = selectedPlugin || "software_debugging";
+    if (!prompt.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      const task = await api.createTask(prompt, selectedPlugin, idempotencyKey);
+      const task = await api.createTask(prompt, effectivePlugin, idempotencyKey);
       if (typeof window !== "undefined" && window.crypto?.randomUUID) {
         setIdempotencyKey(window.crypto.randomUUID());
       }
       router.push(`/chat?task_id=${task.id}`);
     } catch (err) {
       console.error("Task creation failed:", err);
+      router.push(`/chat?plugin_id=${effectivePlugin}`);
       setIsSubmitting(false);
     }
   };
