@@ -379,6 +379,7 @@ function WorkspaceInner() {
     } catch (err: any) {
       console.error("Failed to deploy task:", err);
       setTaskStatus("failed");
+      setFailureReason(err?.message || "Failed to deploy workforce task to server");
     } finally {
       setIsSubmitting(false);
     }
@@ -871,10 +872,13 @@ function WorkspaceInner() {
                 <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
                 <div>
                   <div className="text-sm font-semibold text-red-200">
-                    Task execution interrupted or failed
+                    {taskId ? "Task execution interrupted or failed" : "Failed to deploy workforce task"}
                   </div>
                   <div className="text-xs text-red-300/70">
                     {(() => {
+                      if (!taskId) {
+                        return failureReason || "Failed to connect to backend server. Please check backend status and retry.";
+                      }
                       try {
                         const parsed = JSON.parse(failureReason);
                         if (parsed.reason === "service_restarted") {
@@ -891,14 +895,23 @@ function WorkspaceInner() {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={handleRetryTask}
-                disabled={isSubmitting}
-                className="px-3.5 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCcw className="w-3.5 h-3.5" />
-                <span>Retry Task</span>
-              </button>
+              {taskId ? (
+                <button
+                  onClick={handleRetryTask}
+                  disabled={isSubmitting}
+                  className="px-3.5 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" />
+                  <span>Retry Task</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setTaskStatus("idle")}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition shrink-0 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              )}
             </div>
           )}
 

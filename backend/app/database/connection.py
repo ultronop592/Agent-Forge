@@ -61,13 +61,14 @@ def after_create_hook(target, connection, **kw):
 def ensure_db_schema():
     """Ensure newly added columns and pgvector extensions exist in SQLite or PostgreSQL."""
     is_sqlite = str(engine.url).startswith("sqlite")
+    ts_type = "DATETIME" if is_sqlite else "TIMESTAMP"
     
     task_cols = [
         ("total_tokens", "INTEGER DEFAULT 0"),
         ("total_cost_usd", "FLOAT DEFAULT 0.0"),
         ("total_latency_ms", "FLOAT DEFAULT 0.0"),
         ("failure_reason", "TEXT"),
-        ("last_heartbeat_at", "DATETIME"),
+        ("last_heartbeat_at", ts_type),
         ("owner_instance", "VARCHAR(64)"),
         ("retry_of", "VARCHAR(36)"),
     ]
@@ -159,20 +160,32 @@ def ensure_db_schema():
                     pass
 
                 # 2. Query existing columns in tasks
-                res_tasks = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='tasks'")).fetchall()
-                existing_task_cols = {row[0] for row in res_tasks}
-                for col_name, col_type in task_cols:
-                    if col_name not in existing_task_cols:
-                        conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                try:
+                    res_tasks = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='tasks'")).fetchall()
+                    existing_task_cols = {row[0] for row in res_tasks}
+                    for col_name, col_type in task_cols:
+                        if col_name not in existing_task_cols:
+                            try:
+                                conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
+                                conn.commit()
+                            except Exception:
+                                conn.rollback()
+                except Exception:
+                    pass
 
                 # 3. Query existing columns in agent_logs
-                res_logs = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='agent_logs'")).fetchall()
-                existing_log_cols = {row[0] for row in res_logs}
-                for col_name, col_type in log_cols:
-                    if col_name not in existing_log_cols:
-                        conn.execute(text(f"ALTER TABLE agent_logs ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                try:
+                    res_logs = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='agent_logs'")).fetchall()
+                    existing_log_cols = {row[0] for row in res_logs}
+                    for col_name, col_type in log_cols:
+                        if col_name not in existing_log_cols:
+                            try:
+                                conn.execute(text(f"ALTER TABLE agent_logs ADD COLUMN {col_name} {col_type}"))
+                                conn.commit()
+                            except Exception:
+                                conn.rollback()
+                except Exception:
+                    pass
 
                 # 4. Check memories table for pgvector column & HNSW index
                 res_mem = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='memories'")).fetchall()
