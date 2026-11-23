@@ -219,7 +219,7 @@ class MemoryAgent(BaseAgent):
         )
 
         mock_memory_report = (
-            f"# 🧠 Historical Context Synthesis: {subtask_title}\n\n"
+            f"#  Historical Context Synthesis: {subtask_title}\n\n"
             "## 1. Vector Search Audit\n"
             f"**Search Target:** `{search_query[:100]}`  \n"
             f"**Recalled Insights:**\n{recalled_str}\n\n"
