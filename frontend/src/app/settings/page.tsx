@@ -292,19 +292,13 @@ export default function SettingsPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">Backend API Secret Key</h3>
-                {apiKey ? (
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                    Configured
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
-                    Optional / Local Dev
-                  </span>
-                )}
+                <h3 className="text-sm font-bold text-white">Public Access & API Key</h3>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  Open Public Access
+                </span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                If your Render deployment has <code className="text-[#da7756] bg-zinc-900 px-1 py-0.5 rounded">API_SECRET_KEY</code> set, enter it here to authorize task dispatch.
+                Workforce flow orchestration is currently open for anyone to use freely without requiring authentication.
               </p>
             </div>
           </div>
