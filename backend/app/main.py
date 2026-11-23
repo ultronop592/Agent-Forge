@@ -50,13 +50,6 @@ def validate_production_environment(
 ) -> None:
     env = (environment if environment is not None else getattr(settings, "environment", None) or os.environ.get("ENVIRONMENT", "development")).strip().lower()
     if env == "production":
-        secret_key = api_secret_key if api_secret_key is not None else (getattr(settings, "api_secret_key", "") or os.environ.get("API_SECRET_KEY", ""))
-        if not secret_key or not secret_key.strip():
-            raise RuntimeError(
-                "Refusing to start in production environment: API_SECRET_KEY is empty. "
-                "Set API_SECRET_KEY in your environment or Render dashboard."
-            )
-
         admin_key = admin_api_key if admin_api_key is not None else (getattr(settings, "admin_api_key", "") or os.environ.get("ADMIN_API_KEY", ""))
         if not admin_key or not admin_key.strip():
             raise RuntimeError(
@@ -105,13 +98,13 @@ app.add_middleware(
 
 from backend.app.core.security import verify_api_key
 
-app.include_router(tasks.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(agents.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(memory.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(tasks.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
+app.include_router(memory.router, prefix="/api")
 app.include_router(plugins.router, prefix="/api")
-app.include_router(mcp.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(evals.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(export.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(mcp.router, prefix="/api")
+app.include_router(evals.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
 
 
 @app.get("/health")

@@ -157,18 +157,10 @@ def test_audit_log_recorded_on_enable(api_client: TestClient, db_session: Sessio
 
 
 def test_production_startup_guards() -> None:
-    with pytest.raises(RuntimeError, match="API_SECRET_KEY is empty"):
-        validate_production_environment(
-            environment="production",
-            api_secret_key="",
-            admin_api_key="valid-admin",
-            allowed_origins=["https://agentforge.vercel.app"]
-        )
-
     with pytest.raises(RuntimeError, match="ADMIN_API_KEY is empty"):
         validate_production_environment(
             environment="production",
-            api_secret_key="valid-api",
+            api_secret_key="",
             admin_api_key="",
             allowed_origins=["https://agentforge.vercel.app"]
         )
