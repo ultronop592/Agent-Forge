@@ -108,7 +108,7 @@ from backend.app.core.security import verify_api_key
 app.include_router(tasks.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(agents.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(memory.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(plugins.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(plugins.router, prefix="/api")
 app.include_router(mcp.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(evals.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(export.router, prefix="/api", dependencies=[Depends(verify_api_key)])

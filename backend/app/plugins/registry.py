@@ -7,16 +7,25 @@ logger = logging.getLogger("agentforge.plugins")
 class PluginRegistry:
     def __init__(self):
         self._plugins: Dict[str, BaseWorkflowPlugin] = {}
+        self._aliases: Dict[str, str] = {
+            "code_fix": "software_debugging",
+            "deep_analysis": "general_analysis",
+            "market_research": "startup_research",
+            "fact_check_qa": "startup_research",
+        }
 
     def register(self, plugin: BaseWorkflowPlugin):
         self._plugins[plugin.plugin_id] = plugin
         logger.info(f"Registered plugin: {plugin.name} ({plugin.plugin_id})")
 
     def get_plugin(self, plugin_id: str) -> BaseWorkflowPlugin:
-        if plugin_id not in self._plugins:
-            # Return the first one as default if invalid id
-            return list(self._plugins.values())[0] if self._plugins else None
-        return self._plugins[plugin_id]
+        canonical_id = self._aliases.get(plugin_id, plugin_id)
+        if canonical_id in self._plugins:
+            return self._plugins[canonical_id]
+        if plugin_id in self._plugins:
+            return self._plugins[plugin_id]
+        # Return the first one as default if invalid id
+        return list(self._plugins.values())[0] if self._plugins else None
 
     def get_all_plugins(self) -> List[BaseWorkflowPlugin]:
         return list(self._plugins.values())
